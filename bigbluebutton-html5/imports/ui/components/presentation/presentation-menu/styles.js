@@ -4,11 +4,9 @@ import { headingsFontWeight } from '/imports/ui/stylesheets/styled-components/ty
 import {
   colorDanger,
   colorGray,
-  colorGrayDark,
   colorSuccess,
   colorGrayLightest,
-  colorPrimary,
-  colorWhite,
+  colorOffWhite,
 } from '/imports/ui/stylesheets/styled-components/palette';
 import {
   borderSizeLarge,
@@ -16,39 +14,54 @@ import {
   statusIconSize,
   borderSize,
   statusInfoHeight,
-  borderRadius,
-  mdPaddingY,
-  mdPaddingX,
 } from '/imports/ui/stylesheets/styled-components/general';
 
 const DropdownButton = styled.button`
-  background-color: ${colorGrayLightest};
+  background-color: ${colorOffWhite};
   border: none;
-  border-radius: 1px;
-  color: ${colorGrayDark};
+  border-radius: 13px;
+  box-shadow: 0px 0px 2px rgba(0, 0, 0, 0.16),
+    0px 2px 3px rgba(0, 0, 0, 0.24),
+    0px 2px 6px rgba(0, 0, 0, 0.1);
+  color: #2d2d2d;
   cursor: pointer;
-  padding: .2rem .5rem;
+  padding: .3rem .5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  tab-index: 0;
 
-  &:hover, &:focus {
-    color: ${colorGray};
-  }
-
-  &:focus {
-    outline: ${colorGray} solid ${borderSize};
+  &:hover {
+    background-color: ${colorGrayLightest};
   }
 `;
 
 const Right = styled.div`
   cursor: pointer;
   position: absolute;
-  left: auto;
-  top: ${borderSize};
-  right: ${borderSize};
+  right: 3px;
+  top: 2px;
   z-index: 999;
 
+  > div {
+    width: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  button {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   [dir="rtl"] & {
+    left: 3px;
     right: auto;
-    left : ${borderSize};
   }
 `;
 
@@ -125,52 +138,9 @@ const Line = styled.div`
   padding: ${lgPaddingX} 0;
 `;
 
-const List = styled.ul`
-  list-style-type: none;
-  padding: ${mdPaddingY} ${borderSize};
-  margin: 0;
-  white-space: nowrap;
-  text-align: left;
-
-  [dir="rtl"] & {
-    text-align: right;
-  }
-`;
-
-const ListItem = styled.li`
-  padding: ${mdPaddingY} ${mdPaddingX};
-
-  &:hover {
-    background-color: ${colorPrimary};
-    color: white;
-  }
-`;
-
-const Dropdown = styled.div`
-  position: absolute;
-  right: 0;
-  top: 117%;
-  background-color: ${colorWhite};
-  z-index: 1000;
-  box-shadow: 0 0 10px 1px ${colorGrayLightest};
-  border-radius: ${borderRadius};
-
-  [dir="rtl"] & {
-    right: auto;
-    left: 0;
-  }
-`;
-
 const ButtonIcon = styled(Icon)`
   width: 1em;
   text-align: center;
-`;
-
-const Overlay = styled.div`
-  position: fixed;
-  inset: 0;
-  z-index: 999;
-  cursor: auto;
 `;
 
 export default {
@@ -180,9 +150,5 @@ export default {
   StatusIcon,
   ToastIcon,
   Line,
-  List,
-  Dropdown,
-  ListItem,
   ButtonIcon,
-  Overlay,
 };

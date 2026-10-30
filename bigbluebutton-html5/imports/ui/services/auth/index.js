@@ -1,33 +1,22 @@
 /* eslint prefer-promise-reject-errors: 0 */
-import { Tracker } from 'meteor/tracker';
-
+import { makeVar, useReactiveVar } from '@apollo/client';
 import Storage from '/imports/ui/services/storage/session';
-
-import { initAnnotationsStreamListener } from '/imports/ui/components/whiteboard/service';
-import allowRedirectToLogoutURL from '/imports/ui/components/meeting-ended/service';
-import { initCursorStreamListener } from '/imports/ui/components/cursor/service';
-import SubscriptionRegistry from '/imports/ui/services/subscription-registry/subscriptionRegistry';
-import { ValidationStates } from '/imports/api/auth-token-validation';
-
-const CONNECTION_TIMEOUT = Meteor.settings.public.app.connectionTimeout;
+import Session from '/imports/ui/services/storage/in-memory';
 
 class Auth {
   constructor() {
-    this._loggedIn = {
-      value: false,
-      tracker: new Tracker.Dependency(),
-    };
+    this._loggedIn = makeVar(false);
 
     const queryParams = new URLSearchParams(document.location.search);
     if (queryParams.has('sessionToken')
-      && queryParams.get('sessionToken') !== Session.get('sessionToken')) {
+      && queryParams.get('sessionToken') !== Session.getItem('sessionToken')) {
       return;
     }
 
     this._meetingID = Storage.getItem('meetingID');
     this._userID = Storage.getItem('userID');
     this._authToken = Storage.getItem('authToken');
-    this._sessionToken = Storage.getItem('sessionToken');
+    this._sessionToken = makeVar(Storage.getItem('sessionToken'));
     this._logoutURL = Storage.getItem('logoutURL');
     this._confname = Storage.getItem('confname');
     this._externUserID = Storage.getItem('externUserID');
@@ -50,16 +39,20 @@ class Auth {
   }
 
   get sessionToken() {
-    return this._sessionToken;
+    try {
+      return this._sessionToken();
+    } catch {
+      return null;
+    }
   }
 
   set sessionToken(sessionToken) {
-    this._sessionToken = sessionToken;
-    Storage.setItem('sessionToken', this._sessionToken);
-  }
-
-  get sessionToken() {
-    return this._sessionToken;
+    if (this._sessionToken) {
+      this._sessionToken(sessionToken);
+    } else {
+      this._sessionToken = makeVar(sessionToken);
+    }
+    Storage.setItem('sessionToken', this._sessionToken());
   }
 
   get userID() {
@@ -117,13 +110,15 @@ class Auth {
   }
 
   get loggedIn() {
-    this._loggedIn.tracker.depend();
-    return this._loggedIn.value;
+    return this._loggedIn();
   }
 
   set loggedIn(value) {
-    this._loggedIn.value = value;
-    this._loggedIn.tracker.changed();
+    this._loggedIn(value);
+  }
+
+  useLoggedIn() {
+    return useReactiveVar(this._loggedIn);
   }
 
   get credentials() {
@@ -149,15 +144,6 @@ class Auth {
       externUserID: this.externUserID,
       uniqueClientSession: this.uniqueClientSession,
     };
-  }
-
-  set _connectionID(connectionId) {
-    this._connectionID = connectionId;
-    Storage.setItem('sessionToken', this._connectionID);
-  }
-
-  get sessionToken() {
-    return this._sessionToken;
   }
 
   set(
@@ -196,9 +182,11 @@ class Auth {
 
   logout() {
     if (!this.loggedIn) {
+      if (allowRedirectToLogoutURL()) {
+        return Promise.resolve(this._logoutURL);
+      }
       return Promise.resolve();
     }
-
 
     return new Promise((resolve) => {
       if (allowRedirectToLogoutURL()) {
@@ -210,56 +198,22 @@ class Auth {
     });
   }
 
-  authenticate(force) {
-    if (this.loggedIn && !force) {
-      return Promise.resolve();
+  allowRedirectToLogoutURL() {
+    const ALLOW_DEFAULT_LOGOUT_URL = window.meetingClientSettings.public.app.allowDefaultLogoutUrl;
+    const protocolPattern = /^((http|https):\/\/)/;
+    if (this.logoutURL) {
+      // default logoutURL
+      // compare only the host to ignore protocols
+      const urlWithoutProtocolForAuthLogout = this.logoutURL.replace(protocolPattern, '');
+      const urlWithoutProtocolForLocationOrigin = window.location.origin.replace(protocolPattern, '');
+      if (urlWithoutProtocolForAuthLogout === urlWithoutProtocolForLocationOrigin) {
+        return ALLOW_DEFAULT_LOGOUT_URL;
+      }
+      // custom logoutURL
+      return true;
     }
-
-    if (!(this.meetingID && this.userID && this.token)) {
-      return Promise.reject({
-        error: 401,
-        description: Session.get('errorMessageDescription') ? Session.get('errorMessageDescription') : 'Authentication failed due to missing credentials',
-      });
-    }
-
-    this.loggedIn = false;
-    return this.validateAuthToken()
-      .then(() => {
-        this.loggedIn = true;
-        this.uniqueClientSession = `${this.sessionToken}-${Math.random().toString(36).substring(6)}`;
-      });
-  }
-
-  validateAuthToken() {
-    return new Promise((resolve, reject) => {
-      SubscriptionRegistry.createSubscription('current-user');
-      const validationTimeout = setTimeout(() => {
-        reject({
-          error: 408,
-          description: 'Authentication timeout',
-        });
-      }, CONNECTION_TIMEOUT);
-
-      Meteor.call('validateAuthToken', this.meetingID, this.userID, this.token, this.externUserID, (err, result) => {
-        const authenticationTokenValidation = result;
-        if (!authenticationTokenValidation) return;
-
-        switch (authenticationTokenValidation.validationStatus) {
-          case ValidationStates.INVALID:
-            reject({ error: 403, description: authenticationTokenValidation.reason });
-            break;
-          case ValidationStates.VALIDATED:
-            initCursorStreamListener();
-            initAnnotationsStreamListener();
-            clearTimeout(validationTimeout);
-            this.connectionID = authenticationTokenValidation.connectionId;
-            Session.set('userWillAuth', false);
-            setTimeout(() => resolve(true), 100);
-            break;
-          default:
-        }
-      });
-    });
+    // no logout url
+    return false;
   }
 
   authenticateURL(url) {

@@ -1,20 +1,15 @@
 package org.bigbluebutton.core.running
 
-import java.io.{ PrintWriter, StringWriter }
-
-import akka.actor.Actor
-import akka.actor.ActorLogging
-import akka.actor.Props
-import akka.actor.OneForOneStrategy
-import akka.actor.SupervisorStrategy.Resume
-
-import scala.concurrent.duration._
+import org.apache.pekko.actor.{ Actor, ActorLogging, OneForOneStrategy, Props }
+import org.apache.pekko.actor.SupervisorStrategy.Resume
 import org.bigbluebutton.SystemConfiguration
 import org.bigbluebutton.common2.domain.DefaultProps
 import org.bigbluebutton.core.api._
 import org.bigbluebutton.core.bus.{ BigBlueButtonEvent, InternalEventBus }
 
+import java.io.{ PrintWriter, StringWriter }
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
 
 object MeetingActorAudit {
   def props(
@@ -47,7 +42,7 @@ class MeetingActorAudit(
 
   private val MonitorFrequency = 10 seconds
 
-  context.system.scheduler.schedule(5 seconds, MonitorFrequency, self, AuditMonitorInternalMsg)
+  context.system.scheduler.scheduleWithFixedDelay(5 seconds, MonitorFrequency, self, AuditMonitorInternalMsg)
 
   // Query to get voice conference users
   getUsersInVoiceConf(props, outGW)
@@ -65,15 +60,13 @@ class MeetingActorAudit(
     case AuditMonitorInternalMsg => handleMonitor()
   }
 
-  def handleMonitor() {
+  def handleMonitor(): Unit = {
     handleMonitorNumberOfWebUsers()
   }
 
-  def handleMonitorNumberOfWebUsers() {
+  def handleMonitorNumberOfWebUsers(): Unit = {
     eventBus.publish(BigBlueButtonEvent(props.meetingProp.intId, MonitorNumberOfUsersInternalMsg(props.meetingProp.intId)))
-
-    // Trigger updating users of time remaining on meeting.
-    eventBus.publish(BigBlueButtonEvent(props.meetingProp.intId, SendTimeRemainingAuditInternalMsg(props.meetingProp.intId, 0)))
+    eventBus.publish(BigBlueButtonEvent(props.meetingProp.intId, MonitorGuestWaitPresenceInternalMsg(props.meetingProp.intId)))
 
     if (props.meetingProp.isBreakout) {
       // This is a breakout room. Update the main meeting with list of users in this breakout room.
@@ -81,11 +74,6 @@ class MeetingActorAudit(
         props.meetingProp.intId,
         SendBreakoutUsersAuditInternalMsg(props.breakoutProps.parentId, props.meetingProp.intId)
       ))
-    }
-
-    // Trigger recording timer, only for meeting allowing recording
-    if (props.recordProp.record) {
-      eventBus.publish(BigBlueButtonEvent(props.meetingProp.intId, SendRecordingTimerInternalMsg(props.meetingProp.intId)))
     }
   }
 

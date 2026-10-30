@@ -19,20 +19,22 @@ class UrlMappings {
       action = [GET: 'numberOfSlides']
     }
 
-    "/bigbluebutton/presentation/$conference/$room/$presentation_name/slide/$id"(controller: "presentation") {
-      action = [GET: 'showSlide']
-    }
-
     "/bigbluebutton/presentation/$conference/$room/$presentation_name/thumbnails"(controller: "presentation") {
       action = [GET: 'numberOfThumbnails']
     }
 
     "/bigbluebutton/presentation/$conference/$room/$presentation_name/thumbnail/$id"(controller: "presentation") {
       action = [GET: 'showThumbnail']
+      constraints {
+        id matches: /\d+/
+      }
     }
 
     "/bigbluebutton/presentation/$conference/$room/$presentation_name/png/$id"(controller: "presentation") {
       action = [GET: 'showPng']
+      constraints {
+        id matches: /\d+/
+      }
     }
 
     "/bigbluebutton/presentation/$conference/$room/$presentation_name/svgs"(controller: "presentation") {
@@ -41,6 +43,9 @@ class UrlMappings {
 
     "/bigbluebutton/presentation/$conference/$room/$presentation_name/svg/$id"(controller: "presentation") {
       action = [GET: 'showSvgImage']
+      constraints {
+        id matches: /\d+/
+      }
     }
 
     "/bigbluebutton/presentation/$conference/$room/$presentation_name/textfiles"(controller: "presentation") {
@@ -49,15 +54,33 @@ class UrlMappings {
 
     "/bigbluebutton/presentation/$conference/$room/$presentation_name/textfiles/$id"(controller: "presentation") {
       action = [GET: 'showTextfile']
+      constraints {
+        id matches: /\d+/
+      }
     }
 
     "/bigbluebutton/presentation/download/$meetingId/$presId"(controller: "presentation") {
       action = [GET: 'downloadFile']
     }
 
+    "/bigbluebutton/api/create"(controller: "api") {
+      action = [GET: 'create', POST: 'create']
+    }
 
-    "/bigbluebutton/api/setPollXML"(controller: "api") {
-      action = [POST: 'setPollXML']
+    "/bigbluebutton/api/join"(controller: "api") {
+      action = [GET: 'join']
+    }
+
+    "/bigbluebutton/api/isMeetingRunning"(controller: "api") {
+      action = [GET: 'isMeetingRunning', POST: 'isMeetingRunning']
+    }
+
+    "/bigbluebutton/api/end"(controller: "api") {
+      action = [GET: 'end', POST: 'end']
+    }
+
+    "/bigbluebutton/api/getMeetingInfo"(controller: "api") {
+      action = [GET: 'getMeetingInfo', POST: 'getMeetingInfo']
     }
 
     "/bigbluebutton/api/getMeetings"(controller: "api") {
@@ -66,6 +89,31 @@ class UrlMappings {
 
     "/bigbluebutton/api/getSessions"(controller: "api") {
       action = [GET: 'getSessionsHandler', POST: 'getSessionsHandler']
+    }
+
+    "/bigbluebutton/api/stuns"(controller: "api") {
+      action = [GET: 'stuns', POST: 'stuns']
+    }
+
+    "/bigbluebutton/api/signOut"(controller: "api") {
+      action = [GET: 'signOut', POST: 'signOut']
+    }
+
+    "/bigbluebutton/api/insertDocument"(controller: "api") {
+      action = [POST: 'insertDocument']
+    }
+
+    "/bigbluebutton/api/getJoinUrl"(controller: "api") {
+      action = [GET: 'getJoinUrl', POST: 'getJoinUrl']
+    }
+
+    "/bigbluebutton/api/learningDashboard"(controller: "api") {
+      action = [GET: 'learningDashboard', POST: 'learningDashboard']
+    }
+
+
+    "/bigbluebutton/api/sendChatMessage"(controller: "api") {
+      action = [GET: 'sendChatMessage']
     }
 
     "/bigbluebutton/api/getRecordings"(controller: "recording") {

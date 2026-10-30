@@ -1,18 +1,25 @@
 import React, { Component } from 'react';
-import Modal from '/imports/ui/components/common/modal/fullscreen/component';
 import { defineMessages, injectIntl } from 'react-intl';
+import Langmap from 'langmap';
+import About from '/imports/ui/components/settings/submenus/about/component';
 import DataSaving from '/imports/ui/components/settings/submenus/data-saving/component';
 import Application from '/imports/ui/components/settings/submenus/application/component';
 import Notification from '/imports/ui/components/settings/submenus/notification/component';
-import _ from 'lodash';
+import { clone } from 'radash';
 import PropTypes from 'prop-types';
-import { withModalMounter } from '/imports/ui/components/common/modal/service';
 import Styled from './styles';
+import { formatLocaleCode } from '/imports/utils/string-utils';
+import { setUseCurrentLocale } from '../../core/local-states/useCurrentLocale';
+import Transcription from '/imports/ui/components/settings/submenus/transcription/component';
 
 const intlMessages = defineMessages({
   appTabLabel: {
     id: 'app.settings.applicationTab.label',
     description: 'label for application tab',
+  },
+  aboutTabLabel: {
+    id: 'app.about.title',
+    description: 'label for about tab',
   },
   audioTabLabel: {
     id: 'app.settings.audioTab.label',
@@ -66,6 +73,26 @@ const intlMessages = defineMessages({
     id: 'app.switch.offLabel',
     description: 'label for toggle switch off state',
   },
+  transcriptionLabel: {
+    id: 'app.settings.transcriptionTab.label',
+    description: 'label for transcriptions tab',
+  },
+  unsavedChangesModalTitle: {
+    id: 'app.appsGallery.modal.title',
+    description: 'label for the title of the unsaved changes modal',
+  },
+  unsavedChangesMessage: {
+    id: 'app.settings.unsavedChanges.message',
+    description: 'label for the title of the unsaved changes modal',
+  },
+  unsavedChangesIgnoreMessage: {
+    id: 'app.settings.unsavedChanges.ignoreMessage',
+    description: 'label for the title of the unsaved changes modal',
+  },
+  unsavedChangesIgnoreButtonLabel: {
+    id: 'app.settings.unsavedChanges.ignoreButtonLabel',
+    description: 'label for the title of the unsaved changes modal',
+  },
 });
 
 const propTypes = {
@@ -93,8 +120,16 @@ const propTypes = {
   }).isRequired,
   updateSettings: PropTypes.func.isRequired,
   availableLocales: PropTypes.objectOf(PropTypes.array).isRequired,
-  mountModal: PropTypes.func.isRequired,
-  showToggleLabel: PropTypes.bool.isRequired,
+  isReactionsEnabled: PropTypes.bool.isRequired,
+  transcription: PropTypes.shape({
+    partialUtterances: PropTypes.bool,
+    minUtteraceLength: PropTypes.number,
+  }).isRequired,
+  isGladiaEnabled: PropTypes.bool.isRequired,
+  fallbackLocales: PropTypes.objectOf(PropTypes.shape({
+    englishName: PropTypes.string.isRequired,
+    nativeName: PropTypes.string.isRequired,
+  })).isRequired,
 };
 
 class Settings extends Component {
@@ -106,41 +141,78 @@ class Settings extends Component {
     super(props);
 
     const {
-      dataSaving, application, selectedTab,
+      dataSaving, application, selectedTab, transcription,
     } = props;
 
     this.state = {
       current: {
-        dataSaving: _.clone(dataSaving),
-        application: _.clone(application),
+        dataSaving: clone(dataSaving),
+        application: clone(application),
+        transcription: clone(transcription),
       },
       saved: {
-        dataSaving: _.clone(dataSaving),
-        application: _.clone(application),
+        dataSaving: clone(dataSaving),
+        application: clone(application),
       },
-      selectedTab: _.isFinite(selectedTab) && selectedTab >= 0 && selectedTab <= 2
+      selectedTab: Number.isFinite(selectedTab) && selectedTab >= 0 && selectedTab <= 3
         ? selectedTab
         : 0,
+      unsavedModalOpen: false,
+      hasUnsavedChanges: false,
     };
 
     this.updateSettings = props.updateSettings;
     this.handleUpdateSettings = this.handleUpdateSettings.bind(this);
     this.handleSelectTab = this.handleSelectTab.bind(this);
     this.displaySettingsStatus = this.displaySettingsStatus.bind(this);
+    this.handleClose = this.handleClose.bind(this);
+    this.handleIgnoreChanges = this.handleIgnoreChanges.bind(this);
+    this.performClose = this.performClose.bind(this);
   }
 
   componentDidMount() {
-    const { availableLocales } = this.props;
+    const { availableLocales, fallbackLocales } = this.props;
 
     availableLocales.then((locales) => {
-      this.setState({ allLocales: locales });
+      const tempAggregateLocales = locales
+        .map((file) => file.name)
+        .map((file) => file.replace('.json', ''))
+        .map((file) => file.replace('_', '-'))
+        .map((locale) => {
+          const localeName = (Langmap[locale] || {}).nativeName
+            || (fallbackLocales[locale] || {}).nativeName
+            || locale;
+          return {
+            locale,
+            name: localeName,
+          };
+        })
+        .reverse()
+        .filter((item, index, self) => index === self.findIndex((i) => (
+          i.name === item.name
+        )))
+        .reverse();
+
+      this.setState({ allLocales: tempAggregateLocales });
     });
+
+    // needed because the initial value is null in the saved state
+    const { saved } = this.state;
+    saved.application.fontSize = document.getElementsByTagName('html')[0].style.fontSize;
+    this.setState({ saved });
   }
 
   handleUpdateSettings(key, newSettings) {
-    const settings = this.state;
-    settings.current[key] = newSettings;
-    this.setState(settings);
+    const { saved } = this.state;
+    const hasUnsavedChanges = JSON.stringify(saved[key]) !== JSON.stringify(newSettings);
+
+    this.setState((prevState) => ({
+      current: {
+        ...prevState.current,
+        [key]: newSettings,
+      },
+      hasUnsavedChanges,
+    }));
   }
 
   handleSelectTab(tab) {
@@ -149,11 +221,38 @@ class Settings extends Component {
     });
   }
 
-  displaySettingsStatus(status) {
-    const { intl } = this.props;
+  handleClose() {
+    const { hasUnsavedChanges } = this.state;
 
+    if (hasUnsavedChanges) {
+      this.setState({ unsavedModalOpen: true });
+      return;
+    }
+    this.performClose();
+  }
+
+  handleIgnoreChanges() {
+    this.setState({ unsavedModalOpen: false }, () => {
+      this.performClose();
+    });
+  }
+
+  performClose() {
+    const { saved } = this.state;
+    const { setIsOpen } = this.props;
+    Settings.setHtmlFontSize(saved.application.fontSize);
+    document.getElementsByTagName('html')[0].lang = saved.application.locale;
+    setIsOpen(false);
+  }
+
+  displaySettingsStatus(status, textOnly = false) {
+    const { intl } = this.props;
+    if (textOnly) {
+      return status ? intl.formatMessage(intlMessages.on)
+        : intl.formatMessage(intlMessages.off);
+    }
     return (
-      <Styled.ToggleLabel>
+      <Styled.ToggleLabel aria-hidden>
         {status ? intl.formatMessage(intlMessages.on)
           : intl.formatMessage(intlMessages.off)}
       </Styled.ToggleLabel>
@@ -164,12 +263,18 @@ class Settings extends Component {
     const {
       intl,
       isModerator,
+      isPresenter,
       showGuestNotification,
-      showToggleLabel,
       layoutContextDispatch,
       selectedLayout,
       isScreenSharingEnabled,
       isVideoEnabled,
+      isReactionsEnabled,
+      isGladiaEnabled,
+      paginationToggleEnabled,
+      isChatEnabled,
+      setIsOpen,
+      setIsShortcutModalOpen,
     } = this.props;
 
     const {
@@ -191,13 +296,11 @@ class Settings extends Component {
             aria-labelledby="appTab"
             selectedClassName="is-selected"
           >
-            <Styled.SettingsIcon iconName="application" />
             <span id="appTab">{intl.formatMessage(intlMessages.appTabLabel)}</span>
           </Styled.SettingsTabSelector>
           <Styled.SettingsTabSelector
             selectedClassName="is-selected"
           >
-            <Styled.SettingsIcon iconName="alert" />
             <span id="notificationTab">{intl.formatMessage(intlMessages.notificationLabel)}</span>
           </Styled.SettingsTabSelector>
           {isDataSavingTabEnabled
@@ -206,22 +309,39 @@ class Settings extends Component {
                 aria-labelledby="dataSavingTab"
                 selectedClassName="is-selected"
               >
-                <Styled.SettingsIcon iconName="network" />
                 <span id="dataSaving">{intl.formatMessage(intlMessages.dataSavingLabel)}</span>
               </Styled.SettingsTabSelector>
             )
             : null}
+          {isGladiaEnabled
+            ? (
+              <Styled.SettingsTabSelector
+                aria-labelledby="transcriptionTab"
+                selectedClassName="is-selected"
+              >
+                <span id="transcriptionTab">{intl.formatMessage(intlMessages.transcriptionLabel)}</span>
+              </Styled.SettingsTabSelector>
+            )
+            : null}
+          <Styled.SettingsTabSelector
+            aria-labelledby="aboutTab"
+            selectedClassName="is-selected"
+            data-test="aboutTabButton"
+          >
+            <span id="aboutTab">{intl.formatMessage(intlMessages.aboutTabLabel)}</span>
+          </Styled.SettingsTabSelector>
         </Styled.SettingsTabList>
         <Styled.SettingsTabPanel selectedClassName="is-selected">
           <Application
             allLocales={allLocales}
             handleUpdateSettings={this.handleUpdateSettings}
             settings={current.application}
-            showToggleLabel={showToggleLabel}
             displaySettingsStatus={this.displaySettingsStatus}
             layoutContextDispatch={layoutContextDispatch}
             selectedLayout={selectedLayout}
-            isModerator={isModerator}
+            isPresenter={isPresenter}
+            isReactionsEnabled={isReactionsEnabled}
+            paginationToggleEnabled={paginationToggleEnabled}
           />
         </Styled.SettingsTabPanel>
         <Styled.SettingsTabPanel selectedClassName="is-selected">
@@ -229,8 +349,8 @@ class Settings extends Component {
             handleUpdateSettings={this.handleUpdateSettings}
             settings={current.application}
             showGuestNotification={showGuestNotification}
-            showToggleLabel={showToggleLabel}
             displaySettingsStatus={this.displaySettingsStatus}
+            isChatEnabled={isChatEnabled}
             {...{ isModerator }}
           />
         </Styled.SettingsTabPanel>
@@ -240,7 +360,6 @@ class Settings extends Component {
               <DataSaving
                 settings={current.dataSaving}
                 handleUpdateSettings={this.handleUpdateSettings}
-                showToggleLabel={showToggleLabel}
                 displaySettingsStatus={this.displaySettingsStatus}
                 isScreenSharingEnabled={isScreenSharingEnabled}
                 isVideoEnabled={isVideoEnabled}
@@ -248,6 +367,24 @@ class Settings extends Component {
             </Styled.SettingsTabPanel>
           )
           : null}
+        {isGladiaEnabled
+          ? (
+            <Styled.SettingsTabPanel selectedClassName="is-selected">
+              <Transcription
+                handleUpdateSettings={this.handleUpdateSettings}
+                settings={current.transcription}
+                displaySettingsStatus={this.displaySettingsStatus}
+              />
+            </Styled.SettingsTabPanel>
+          )
+          : null}
+        <Styled.SettingsTabPanel selectedClassName="is-selected">
+          <About
+            settings={current.application}
+            setIsShortcutModalOpen={setIsShortcutModalOpen}
+            setIsOpen={setIsOpen}
+          />
+        </Styled.SettingsTabPanel>
       </Styled.SettingsTabs>
     );
   }
@@ -255,44 +392,82 @@ class Settings extends Component {
   render() {
     const {
       intl,
-      mountModal,
+      setIsOpen,
+      isOpen,
+      setLocalSettings,
+      modalHeight,
+      modalWidth,
     } = this.props;
-    const {
-      current,
-      saved,
-    } = this.state;
+    const { current, saved, unsavedModalOpen } = this.state;
+
+    if (unsavedModalOpen) {
+      return (
+        <Styled.UnsavedChangesModal
+          title={intl.formatMessage(intlMessages.unsavedChangesModalTitle)}
+          modalisOpen={unsavedModalOpen}
+          dismiss={{
+            callback: () => this.setState({ unsavedModalOpen: false }),
+          }}
+          onRequestClose={() => this.setState({ unsavedModalOpen: false })}
+        >
+          <Styled.UnsavedChangesContent>
+            <Styled.UnsavedChangesText>
+              {intl.formatMessage(intlMessages.unsavedChangesMessage)}
+            </Styled.UnsavedChangesText>
+            <Styled.UnsavedChangesIgnoreText>
+              {intl.formatMessage(intlMessages.unsavedChangesIgnoreMessage)}
+            </Styled.UnsavedChangesIgnoreText>
+            <Styled.UnsavedActionsContainer>
+              <Styled.ActionButton onClick={() => this.setState({ unsavedModalOpen: false })}>
+                {intl.formatMessage(intlMessages.CancelLabel)}
+              </Styled.ActionButton>
+              <Styled.ActionButton onClick={this.handleIgnoreChanges}>
+                {intl.formatMessage(intlMessages.unsavedChangesIgnoreButtonLabel)}
+              </Styled.ActionButton>
+            </Styled.UnsavedActionsContainer>
+          </Styled.UnsavedChangesContent>
+        </Styled.UnsavedChangesModal>
+      );
+    }
+
     return (
-      <Modal
+      <Styled.Modal
         title={intl.formatMessage(intlMessages.SettingsLabel)}
-        confirm={{
-          callback: () => {
-            this.updateSettings(current, intl.formatMessage(intlMessages.savedAlertLabel));
-            document.body.classList.remove(`lang-${saved.application.locale.split('-')[0]}`);
-            document.body.classList.add(`lang-${current.application.locale.split('-')[0]}`);
-            document.getElementsByTagName('html')[0].lang = current.application.locale;
-            /* We need to use mountModal(null) here to prevent submenu state updates,
-            *  from re-opening the modal.
-            */
-            mountModal(null);
-          },
-          label: intl.formatMessage(intlMessages.SaveLabel),
-          description: intl.formatMessage(intlMessages.SaveLabelDesc),
-        }}
+        width={modalWidth}
+        height={modalHeight}
+        modalisOpen={isOpen}
         dismiss={{
-          callback: () => {
-            Settings.setHtmlFontSize(saved.application.fontSize);
-            document.getElementsByTagName('html')[0].lang = saved.application.locale;
-            mountModal(null);
-          },
-          label: intl.formatMessage(intlMessages.CancelLabel),
-          description: intl.formatMessage(intlMessages.CancelLabelDesc),
+          callback: this.handleClose,
         }}
+        onRequestClose={this.handleClose}
       >
-        {this.renderModalContent()}
-      </Modal>
+        <div>
+          {this.renderModalContent()}
+          <Styled.ActionsContainer>
+            <Styled.ActionButton onClick={this.performClose}>
+              {intl.formatMessage(intlMessages.CancelLabel)}
+            </Styled.ActionButton>
+            <Styled.ActionButton
+              data-test="saveSettingsButton"
+              onClick={() => {
+                this.updateSettings(current, intlMessages.savedAlertLabel, setLocalSettings);
+                if (saved.application.locale !== current.application.locale) {
+                  const { language } = formatLocaleCode(saved.application.locale);
+                  const newLanguage = current.application.locale;
+                  setUseCurrentLocale(newLanguage);
+                  document.body.classList.remove(`lang-${language}`);
+                }
+                setIsOpen(false);
+              }}
+            >
+              {intl.formatMessage(intlMessages.SaveLabel)}
+            </Styled.ActionButton>
+          </Styled.ActionsContainer>
+        </div>
+      </Styled.Modal>
     );
   }
 }
 
 Settings.propTypes = propTypes;
-export default withModalMounter(injectIntl(Settings));
+export default injectIntl(Settings);

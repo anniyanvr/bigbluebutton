@@ -18,8 +18,9 @@
 
 package org.bigbluebutton.core.util.jhotdraw;
 
-import java.awt.geom.*;
-import java.util.*;
+import java.awt.geom.Point2D;
+import java.util.ArrayList;
+import java.util.Arrays;
 
 /**
  * Provides algorithms for fitting Bezier curves to a set of digitized points.
@@ -367,7 +368,7 @@ public class Bezier {
      * @param first Indice of first point in d.
      * @param last Indice of last point in d.
      * @param tHat1 Unit tangent vectors at start point.
-     * @param tHat2 Unit tanget vector at end point.
+     * @param tHat2 Unit tangent vector at end point.
      * @param errorSquared User-defined errorSquared squared.
      * @param bezierPath Path to which the bezier curve segments are added.
      */
@@ -580,7 +581,7 @@ public class Bezier {
      *
      * @param Q  Current fitted bezier curve.
      * @param P  Digitized point.
-     * @param u  Parameter value vor P.
+     * @param u  Parameter value for P.
      */
     private static double newtonRaphsonRootFind(Point2D.Double[] Q, Point2D.Double P, double u) {
         double numerator, denominator;
@@ -661,7 +662,7 @@ public class Bezier {
      * @param last Indice of last point in d.
      * @param uPrime Parameter values for region .
      * @param tHat1 Unit tangent vectors at start point.
-     * @param tHat2 Unit tanget vector at end point.
+     * @param tHat2 Unit tangent vector at end point.
      * @return A cubic bezier curve consisting of 4 control points.
      */
     private static Point2D.Double[] generateBezier(ArrayList<Point2D.Double> d, int first, int last, double[] uPrime, Point2D.Double tHat1, Point2D.Double tHat2) {

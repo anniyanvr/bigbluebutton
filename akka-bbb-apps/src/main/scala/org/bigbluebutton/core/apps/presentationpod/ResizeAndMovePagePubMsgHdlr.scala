@@ -1,11 +1,12 @@
 package org.bigbluebutton.core.apps.presentationpod
 
 import org.bigbluebutton.common2.msgs._
-import org.bigbluebutton.core.bus.MessageBus
-import org.bigbluebutton.core.domain.MeetingState2x
-import org.bigbluebutton.core.running.LiveMeeting
 import org.bigbluebutton.core.apps.{ PermissionCheck, RightsManagementTrait }
+import org.bigbluebutton.core.bus.MessageBus
+import org.bigbluebutton.core.db.PresPageDAO
+import org.bigbluebutton.core.domain.MeetingState2x
 import org.bigbluebutton.core.models.PresentationPage
+import org.bigbluebutton.core.running.LiveMeeting
 
 trait ResizeAndMovePagePubMsgHdlr extends RightsManagementTrait {
   this: PresentationPodHdlrs =>
@@ -45,13 +46,15 @@ trait ResizeAndMovePagePubMsgHdlr extends RightsManagementTrait {
       val yOffset: Double = msg.body.yOffset
       val widthRatio: Double = msg.body.widthRatio
       val heightRatio: Double = msg.body.heightRatio
+      val slideNumber: Int = msg.body.slideNumber
 
       val newState = for {
         pod <- PresentationPodsApp.getPresentationPodIfPresenter(state, podId, msg.header.userId)
-        (updatedPod, page) <- pod.resizePage(presentationId, pageId, xOffset, yOffset, widthRatio, heightRatio)
+        (updatedPod, page) <- pod.resizePage(presentationId, pageId, xOffset, yOffset, widthRatio, heightRatio, slideNumber)
+
       } yield {
         broadcastEvent(msg, podId, page)
-
+        PresPageDAO.resizeAndMovePage(page)
         val pods = state.presentationPodManager.addPod(updatedPod)
         state.update(pods)
       }

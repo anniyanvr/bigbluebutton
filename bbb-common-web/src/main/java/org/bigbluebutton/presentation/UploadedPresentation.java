@@ -21,6 +21,7 @@ package org.bigbluebutton.presentation;
 
 import java.io.File;
 import java.util.ArrayList;
+import org.apache.commons.io.FilenameUtils;
 
 public final class UploadedPresentation {
   private final String podId;
@@ -31,9 +32,11 @@ public final class UploadedPresentation {
   private final boolean uploadFailed;
   private final ArrayList<String> uploadFailReason;
   private File uploadedFile;
+  private String uploadedFileHash;
   private String fileType = "unknown";
   private int numberOfPages = 0;
   private String conversionStatus;
+  private String filenameConverted;
   private final String baseUrl;
   private boolean isDownloadable = false;
   private boolean isRemovable = true;
@@ -41,6 +44,7 @@ public final class UploadedPresentation {
   private String authzToken;
   private boolean conversionStarted = false;
 
+  private boolean defaultPresentation;
 
   public UploadedPresentation(String podId,
                               String meetingId,
@@ -51,7 +55,8 @@ public final class UploadedPresentation {
                               Boolean current,
                               String authzToken,
                               Boolean uploadFailed,
-                              ArrayList<String> uploadFailReason) {
+                              ArrayList<String> uploadFailReason,
+                              Boolean defaultPresentation) {
     this.podId = podId;
     this.meetingId = meetingId;
     this.id = id;
@@ -63,6 +68,21 @@ public final class UploadedPresentation {
     this.authzToken = authzToken;
     this.uploadFailed = uploadFailed;
     this.uploadFailReason = uploadFailReason;
+    this.defaultPresentation = defaultPresentation;
+  }
+
+  public UploadedPresentation(String podId,
+                              String meetingId,
+                              String id,
+                              String temporaryPresentationId,
+                              String name,
+                              String baseUrl,
+                              Boolean current,
+                              String authzToken,
+                              Boolean uploadFailed,
+                              ArrayList<String> uploadFailReason) {
+    this(podId, meetingId, id, temporaryPresentationId, name, baseUrl,
+            current, authzToken, uploadFailed, uploadFailReason, false);
   }
 
   public UploadedPresentation(String podId,
@@ -75,7 +95,21 @@ public final class UploadedPresentation {
                               Boolean uploadFailed,
                               ArrayList<String> uploadFailReason) {
     this(podId, meetingId, id, "", name, baseUrl,
-            current, authzToken, uploadFailed, uploadFailReason);
+            current, authzToken, uploadFailed, uploadFailReason, false);
+  }
+
+  public UploadedPresentation(String podId,
+                              String meetingId,
+                              String id,
+                              String name,
+                              String baseUrl,
+                              Boolean current,
+                              String authzToken,
+                              Boolean uploadFailed,
+                              ArrayList<String> uploadFailReason,
+                              Boolean defaultPresentation) {
+    this(podId, meetingId, id, "", name, baseUrl,
+            current, authzToken, uploadFailed, uploadFailReason, defaultPresentation);
   }
 
   public File getUploadedFile() {
@@ -84,6 +118,14 @@ public final class UploadedPresentation {
 
   public void setUploadedFile(File uploadedFile) {
     this.uploadedFile = uploadedFile;
+  }
+
+  public String getUploadedFileHash() {
+    return uploadedFileHash;
+  }
+
+  public void setUploadedFileHash(String uploadedFileHash) {
+    this.uploadedFileHash = uploadedFileHash;
   }
 
   public String getMeetingId() {
@@ -176,5 +218,22 @@ public final class UploadedPresentation {
 
   public ArrayList<String> getUploadFailReason() {
     return uploadFailReason;
+  }
+
+  public boolean isDefaultPresentation() {
+    return defaultPresentation;
+  }
+
+  public String getFilenameConverted() {
+    if (filenameConverted != null) {
+      return filenameConverted;
+    } else {
+      return "";
+    }
+  }
+
+  public void generateFilenameConverted(String newExtension) {
+    String nameWithoutExtension = FilenameUtils.removeExtension(name);
+    this.filenameConverted = nameWithoutExtension.concat("." + newExtension);
   }
 }

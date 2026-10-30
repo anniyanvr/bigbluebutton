@@ -1,58 +1,44 @@
 require('dotenv').config();
+const { chromiumConfig, firefoxConfig, webkitConfig } = require('./core/browsersConfig');
+const { ELEMENT_WAIT_TIME, CI, ELEMENT_WAIT_LONGER_TIME } = require('./core/constants');
+
+const isParallel = !!process.env.npm_config_parallel;
 
 const config = {
-  workers: 1,
+  workers: CI ? 1 : 2,
   timeout: 3 * 60 * 1000,
-  reporter: [['list']],
+  reporter: CI
+    ? [['blob'], ['./custom-reporter.js']]
+    : [['list'], ['html', { open: 'never' }],
+  ],
+  reportSlowTests: null,
+  forbidOnly: CI,
+  fullyParallel: CI || isParallel,
   use: {
     headless: true,
+    trace: 'on',
+    screenshot: 'on',
+    video: CI ? 'retain-on-failure' : 'on',
+    actionTimeout: ELEMENT_WAIT_LONGER_TIME,
   },
   projects: [
-    {
-      name: 'Chromium',
-      use: {
-        browserName: 'chromium',
-        launchOptions: {
-          args: [
-            '--no-sandbox',
-            '--use-fake-ui-for-media-stream',
-            '--use-fake-device-for-media-stream',
-          ]
-        },
-      },
-    },
-    {
-      name: 'Firefox',
-      use: {
-        browserName: 'firefox',
-        launchOptions: {
-          firefoxUserPrefs: {
-            "media.navigator.streams.fake": true,
-            "media.navigator.permission.disabled": true,
-          }
-        },
-      },
-    },
-    {
-      name: 'WebKit',
-      use: {
-        browserName: 'webkit',
-        launchOptions: {
-          args: [
-            '--no-sandbox',
-            '--use-fake-ui-for-media-stream',
-            '--use-fake-device-for-media-stream',
-          ]
-        },
-      },
-    },
+    chromiumConfig,
+    firefoxConfig,
+    webkitConfig,
   ],
+  expect: {
+    timeout: ELEMENT_WAIT_TIME,
+    toMatchSnapshot: {
+      maxDiffPixelRatio: 0.05,
+      timeout: ELEMENT_WAIT_TIME,
+    },
+    toHaveScreenshot: {
+      maxDiffPixelRatio: 0.05,
+      timeout: ELEMENT_WAIT_TIME,
+    },
+  },
 };
 
-if (process.env.DEBUG_MODE === 'true') {
-  config.reporter.push(['html', { open: 'never' }]);
-  config.use.screenshot = 'only-on-failure';
-  config.use.trace = 'retain-on-failure';
-}
+if (CI) config.retries = 1;
 
 module.exports = config;

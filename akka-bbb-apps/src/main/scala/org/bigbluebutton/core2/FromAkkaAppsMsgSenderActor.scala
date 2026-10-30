@@ -1,10 +1,10 @@
 package org.bigbluebutton.core2
 
-import akka.actor.{ Actor, ActorLogging, Props }
+import org.apache.pekko.actor.{ Actor, ActorLogging, Props }
 import org.bigbluebutton.SystemConfiguration
 import org.bigbluebutton.common2.msgs._
-import org.bigbluebutton.common2.util.JsonUtil
 import org.bigbluebutton.common2.redis.MessageSender
+import org.bigbluebutton.common2.util.JsonUtil
 
 object FromAkkaAppsMsgSenderActor {
   def props(msgSender: MessageSender): Props = Props(classOf[FromAkkaAppsMsgSenderActor], msgSender)
@@ -18,27 +18,10 @@ class FromAkkaAppsMsgSenderActor(msgSender: MessageSender)
     case _                        => log.warning("Cannot handle message ")
   }
 
-  def sendToHTML5InstanceIdChannel(msg: BbbCommonEnvCoreMsg, json: String): Unit = {
-    msg.envelope.routing.get("html5InstanceId") match {
-      case Some(id) => {
-        msgSender.send(toHTML5RedisChannel.concat(id), json)
-      }
-      case _ => log.error("No html5InstanceId for " + msg.envelope.name)
-    }
-  }
-
   def handleBbbCommonEnvCoreMsg(msg: BbbCommonEnvCoreMsg): Unit = {
     val json = JsonUtil.toJson(msg)
 
     msg.envelope.name match {
-
-      // HTML5 sync messages
-      case SyncGetPresentationPodsRespMsg.NAME => sendToHTML5InstanceIdChannel(msg, json)
-      case SyncGetMeetingInfoRespMsg.NAME      => sendToHTML5InstanceIdChannel(msg, json)
-      case SyncGetUsersMeetingRespMsg.NAME     => sendToHTML5InstanceIdChannel(msg, json)
-      case SyncGetGroupChatsRespMsg.NAME       => sendToHTML5InstanceIdChannel(msg, json)
-      case SyncGetGroupChatMsgsRespMsg.NAME    => sendToHTML5InstanceIdChannel(msg, json)
-      case SyncGetVoiceUsersRespMsg.NAME       => sendToHTML5InstanceIdChannel(msg, json)
 
       // Sent to FreeSWITCH
       case EjectAllFromVoiceConfMsg.NAME =>
@@ -48,6 +31,14 @@ class FromAkkaAppsMsgSenderActor(msgSender: MessageSender)
       case EjectUserFromVoiceConfSysMsg.NAME =>
         msgSender.send(toVoiceConfRedisChannel, json)
       case MuteUserInVoiceConfSysMsg.NAME =>
+        msgSender.send(toVoiceConfRedisChannel, json)
+      case DeafUserInVoiceConfSysMsg.NAME =>
+        msgSender.send(toVoiceConfRedisChannel, json)
+      case HoldUserInVoiceConfSysMsg.NAME =>
+        msgSender.send(toVoiceConfRedisChannel, json)
+      case PlaySoundInVoiceConfSysMsg.NAME =>
+        msgSender.send(toVoiceConfRedisChannel, json)
+      case StopSoundInVoiceConfSysMsg.NAME =>
         msgSender.send(toVoiceConfRedisChannel, json)
       case StartRecordingVoiceConfSysMsg.NAME =>
         msgSender.send(toVoiceConfRedisChannel, json)
@@ -59,6 +50,8 @@ class FromAkkaAppsMsgSenderActor(msgSender: MessageSender)
         msgSender.send(toVoiceConfRedisChannel, json)
       case GetUsersStatusToVoiceConfSysMsg.NAME =>
         msgSender.send(toVoiceConfRedisChannel, json)
+      case HoldChannelInVoiceConfSysMsg.NAME =>
+        msgSender.send(toVoiceConfRedisChannel, json)
 
       // Sent to SFU
       case EjectUserFromSfuSysMsg.NAME =>
@@ -67,19 +60,23 @@ class FromAkkaAppsMsgSenderActor(msgSender: MessageSender)
         msgSender.send(toSfuRedisChannel, json)
       case CamStreamUnsubscribeSysMsg.NAME =>
         msgSender.send(toSfuRedisChannel, json)
+      case ToggleListenOnlyModeSysMsg.NAME =>
+        msgSender.send(toSfuRedisChannel, json)
+      case GenerateLiveKitTokenReqMsg.NAME =>
+        msgSender.send(toSfuRedisChannel, json)
 
       //==================================================================
       // Send chat, presentation, and whiteboard in different channels so as not to
       // flood other applications (e.g. bbb-web) with unnecessary messages
 
       // Whiteboard
-      case SendWhiteboardAnnotationEvtMsg.NAME =>
+      case SendWhiteboardAnnotationsEvtMsg.NAME =>
         msgSender.send("from-akka-apps-frontend-redis-channel", json)
       case SendCursorPositionEvtMsg.NAME =>
         msgSender.send("from-akka-apps-frontend-redis-channel", json)
       case ClearWhiteboardEvtMsg.NAME =>
         msgSender.send("from-akka-apps-frontend-redis-channel", json)
-      case UndoWhiteboardEvtMsg.NAME =>
+      case DeleteWhiteboardAnnotationsEvtMsg.NAME =>
         msgSender.send("from-akka-apps-frontend-redis-channel", json)
 
       // Chat
@@ -93,6 +90,8 @@ class FromAkkaAppsMsgSenderActor(msgSender: MessageSender)
         msgSender.send(fromAkkaAppsPresRedisChannel, json)
       case SetCurrentPageEvtMsg.NAME =>
         msgSender.send(fromAkkaAppsPresRedisChannel, json)
+      case SetPageInfiniteWhiteboardEvtMsg.NAME =>
+        msgSender.send(fromAkkaAppsPresRedisChannel, json)
       case ResizeAndMovePageEvtMsg.NAME =>
         msgSender.send(fromAkkaAppsPresRedisChannel, json)
       case RemovePresentationEvtMsg.NAME =>
@@ -101,15 +100,9 @@ class FromAkkaAppsMsgSenderActor(msgSender: MessageSender)
         msgSender.send(fromAkkaAppsPresRedisChannel, json)
 
       // Breakout
-      case UpdateBreakoutUsersEvtMsg.NAME =>
-        msgSender.send(fromAkkaAppsPresRedisChannel, json)
       case BreakoutRoomsListEvtMsg.NAME =>
         msgSender.send(fromAkkaAppsPresRedisChannel, json)
-      case BreakoutRoomsTimeRemainingUpdateEvtMsg.NAME =>
-        msgSender.send(fromAkkaAppsPresRedisChannel, json)
       case BreakoutRoomStartedEvtMsg.NAME =>
-        msgSender.send(fromAkkaAppsPresRedisChannel, json)
-      case MeetingTimeRemainingUpdateEvtMsg.NAME =>
         msgSender.send(fromAkkaAppsPresRedisChannel, json)
       //==================================================================
 
@@ -119,10 +112,6 @@ class FromAkkaAppsMsgSenderActor(msgSender: MessageSender)
       // Poll Record Event
       case UserRespondedToPollRecordMsg.NAME =>
       //==================================================================
-
-      case ValidateAuthTokenRespMsg.NAME =>
-        msgSender.send(fromAkkaAppsRedisChannel, json) // needed for cases when single nodejs process is running (like in development)
-        msgSender.send("from-akka-apps-frontend-redis-channel", json)
 
       // Message duplicated for frontend and backend processes
       case MeetingCreatedEvtMsg.NAME =>
@@ -146,6 +135,15 @@ class FromAkkaAppsMsgSenderActor(msgSender: MessageSender)
         msgSender.send("from-akka-apps-frontend-redis-channel", json)
 
       case UpdateExternalVideoEvtMsg.NAME =>
+        msgSender.send("from-akka-apps-frontend-redis-channel", json)
+
+      case NotifyAllInMeetingEvtMsg.NAME =>
+        msgSender.send("from-akka-apps-frontend-redis-channel", json)
+
+      case NotifyUserInMeetingEvtMsg.NAME =>
+        msgSender.send("from-akka-apps-frontend-redis-channel", json)
+
+      case NotifyRoleInMeetingEvtMsg.NAME =>
         msgSender.send("from-akka-apps-frontend-redis-channel", json)
 
       case _ =>

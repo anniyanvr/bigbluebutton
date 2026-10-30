@@ -1,65 +1,43 @@
-import styled from 'styled-components';
+import styled, { css, keyframes } from 'styled-components';
 import Button from '/imports/ui/components/common/button/component';
-import DeviceSelector from '/imports/ui/components/audio/device-selector/component';
 import { smallOnly } from '/imports/ui/stylesheets/styled-components/breakpoints';
 import {
-  colorWhite,
-  colorGrayLight,
-  colorText,
+  borderSizeSmall,
+  mdPaddingX,
+  mdPaddingY,
+  jumboPaddingX,
+  jumboPaddingY,
+} from '/imports/ui/stylesheets/styled-components/general';
+import {
+  colorGrayLightest,
 } from '/imports/ui/stylesheets/styled-components/palette';
-import { borderSize } from '/imports/ui/stylesheets/styled-components/general';
+import {
+  lineHeightComputed,
+  fontSizeSmall,
+} from '/imports/ui/stylesheets/styled-components/typography';
 
 const FormWrapper = styled.div`
-  min-width: 0;
+  min-width: 100%;
 `;
 
 const Form = styled.div`
-  display: flex;
-  flex-flow: column;
-  margin-top: 1.5rem;
-`;
-
-const Row = styled.div`
-  display: flex;
-  flex-flow: row;
-  justify-content: space-between;
-  margin-bottom: 0.7rem;
-`;
-
-const EnterAudio = styled.div`
-  margin-top: 1.5rem;
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  margin: ${mdPaddingY} ${mdPaddingX} 0 ${mdPaddingX};
+  column-gap: ${jumboPaddingX};
+  row-gap: ${mdPaddingY};
+  @media ${smallOnly} {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
 `;
 
 const AudioNote = styled.div`
+  display: block;
+  margin: 0 ${mdPaddingX} ${jumboPaddingY} ${mdPaddingX};
+  text-align: center;
   @media ${smallOnly} {
-    font-size: 0.8rem;
-  }
-`;
-
-const Col = styled.div`
-  min-width: 0;
-
-  display: flex;
-  flex-grow: 1;
-  flex-basis: 0;
-  margin: 0 1rem 0 0;
-
-  [dir="rtl"] & {
-    margin: 0 0 0 1rem;
-  }
-
-  &:last-child {
-    margin-right: 0;
-    margin-left: inherit;
-    padding: 0 0.1rem 0 4rem;
-
-    [dir="rtl"] & {
-      margin-right: inherit;
-      margin-left: 0;
-      padding: 0 4rem 0 0.1rem;
-    }
+    font-size: ${fontSizeSmall};
   }
 `;
 
@@ -72,11 +50,11 @@ const FormElement = styled.div`
 
 const LabelSmall = styled.label`
   color: black;
-  font-size: 0.85rem;
+  font-size: ${fontSizeSmall};
   font-weight: 600;
 
   & > :first-child {
-    margin-top: 0.5rem;
+    margin: 0.5rem 0 0 0 !important;
   }
 `;
 
@@ -84,85 +62,21 @@ const LabelSmallFullWidth = styled(LabelSmall)`
   width: 100%;
 `;
 
-const SpacedLeftCol = styled.div`
-  min-width: 0;
-
+const EnterAudio = styled.div`
+  margin: 0 ${mdPaddingX} 0 0;
   display: flex;
-  flex-grow: 1;
-  flex-basis: 0;
-  margin: 0 1rem 0 0;
+  justify-content: flex-end;
 
   [dir="rtl"] & {
-    margin: 0 0 0 1rem;
-  }
-
-  &:last-child {
-    margin-right: 0;
-    margin-left: inherit;
-    padding: 0 0.1rem 0 4rem;
-
-    [dir="rtl"] & {
-      margin-right: inherit;
-      margin-left: 0;
-      padding: 0 4rem 0 0.1rem;
-    }
-  }
-
-  & label {
-    flex-grow: 1;
-    flex-basis: 0;
-    margin-right: 0;
-    margin-left: inherit;
-    padding: 0 0.1rem 0 4rem;
-
-    [dir="rtl"] & {
-      margin-right: inherit;
-      margin-left: 0;
-      padding: 0 4rem 0 0.1rem;
-    }
-  }
-
-  &:before {
-    content: "";
-    display: block;
-    flex-grow: 1;
-    flex-basis: 0;
-    margin-right: 1rem;
-    margin-left: inherit;
-
-    [dir="rtl"] & {
-      margin-right: inherit;
-      margin-left: 1rem;
-    }
-  }
-
-  &:last-child {
-    margin-right: 0;
-    margin-left: inherit;
-    padding-right: 0;
-    padding-left: 0;
-
-    [dir="rtl"] & {
-      margin-right: 0;
-      margin-left: inherit;
-    }
+    margin: 0 0 0 ${mdPaddingX};
   }
 `;
 
 const BackButton = styled(Button)`
-  margin: 0 0.5rem 0 0;
   border: none;
 
   [dir="rtl"] & {
-    margin: 0 0 0 0.5rem;
-  }
-
-  @media ${smallOnly} {
-    margin:0 auto 0 0;
-
-    [dir="rtl"] & {
-      margin:0 0 0 auto;
-    }
+    margin: 0 0 0 ${mdPaddingX};
   }
 
   &:first-child {
@@ -170,41 +84,49 @@ const BackButton = styled(Button)`
   }
 `;
 
-const DeviceSelectorSelect = styled(DeviceSelector)`
-  -webkit-appearance: none;
-  -webkit-border-radius: 0px;
-  background: ${colorWhite} url("data:image/svg+xml;charset=utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 5'><path fill='#667189' d='M2 0L0 2h4zm0 5L0 3h4z'/></svg>") no-repeat right .35rem center/.4rem .5rem;
-  background-repeat: no-repeat;
-  border: 0.07rem solid ${colorGrayLight};
-  border-radius: .125rem;
-  color: ${colorText};
-  width: 100%;
-  padding: .4rem;
-
-  &:hover {
-    outline: transparent;
-    outline-style: dotted;
-    outline-width: ${borderSize};
-  }
-
-  &:focus {
-    outline: transparent;
-    outline-width: ${borderSize};
-    outline-style: solid;
+const ellipsis = keyframes`
+  to {
+    width: 1.5em;
   }
 `;
 
+const FetchingAnimation = styled.span`
+  margin: auto;
+  display: inline-block;
+  width: 1.5em;
+
+  &:after {
+    overflow: hidden;
+    display: inline-block;
+    vertical-align: bottom;
+    content: "\\2026"; /* ascii code for the ellipsis character */
+    width: 0;
+    margin-left: 0.25em;
+
+    ${({ animations }) => animations && css`
+      animation: ${ellipsis} steps(4, end) 900ms infinite;
+    `}
+  }
+`;
+
+const BottomSeparator = styled.div`
+  position: relative;
+  width: inherit;
+  height: ${borderSizeSmall};
+  background-color: ${colorGrayLightest};
+  margin: calc(${lineHeightComputed} * 1.25) ${mdPaddingX} calc(${lineHeightComputed} * 1.25) ${mdPaddingX};
+
+`;
+
 export default {
+  BottomSeparator,
   FormWrapper,
   Form,
-  Row,
   EnterAudio,
   AudioNote,
-  Col,
   FormElement,
   LabelSmall,
   LabelSmallFullWidth,
-  SpacedLeftCol,
   BackButton,
-  DeviceSelectorSelect,
+  FetchingAnimation,
 };

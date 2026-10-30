@@ -25,8 +25,7 @@ class Stress {
       await this.modPage.init(true, true, { fullName: `Moderator-${i}` });
       await this.modPage.waitForSelector(e.userAvatar);
       const isPresenter = await checkIsPresenter(this.modPage);
-      await this.modPage.waitAndClick(e.actions);
-      const canStartPoll = await this.modPage.checkElement(e.polling);
+      const canStartPoll = await this.modPage.checkElement(e.pollSidebarButton);
       if (!isPresenter || !canStartPoll) {
         failureCount++;
       }
@@ -52,8 +51,7 @@ class Stress {
 
     // Create breakout rooms with the allow choice option enabled
     await this.modPage.bringToFront();
-    await this.modPage.waitAndClick(e.manageUsers);
-    await this.modPage.waitAndClick(e.createBreakoutRooms);
+    await this.modPage.waitAndClick(e.createBreakoutRoomsButton);
     await this.modPage.waitAndClick(e.allowChoiceRoom);
     await this.modPage.waitAndClick(e.modalConfirmButton);
 
@@ -70,8 +68,7 @@ class Stress {
     await this.modPage.closeAudioModal();
 
     // Create breakout rooms with the allow choice option NOT enabled (randomly assign)
-    await this.modPage.waitAndClick(e.manageUsers);
-    await this.modPage.waitAndClick(e.createBreakoutRooms);
+    await this.modPage.waitAndClick(e.createBreakoutRoomsButton);
     await this.modPage.waitAndClick(e.randomlyAssign);
     await this.modPage.waitAndClick(e.modalConfirmButton);
 
@@ -100,18 +97,25 @@ class Stress {
 
   async usersJoinKeepingConnected() {
     const meetingId = await createMeeting(parameters);
+    const pages = [];
 
     for (let i = 1; i <= c.JOIN_TWO_USERS_KEEPING_CONNECTED_ROUNDS / 2; i++) {
       console.log(`joining ${i * 2} users of ${c.JOIN_TWO_USERS_KEEPING_CONNECTED_ROUNDS}`);
       const modPage = new Page(this.browser, await this.getNewPageTab());
       const userPage = new Page(this.browser, await this.getNewPageTab());
-      Promise.all([
+      pages.push(modPage);
+      pages.push(userPage);
+      await Promise.all([
         modPage.init(true, false, { meetingId, fullName: `Mod-${i}` }),
         userPage.init(false, false, { meetingId, fullName: `User-${i}` }),
       ]);
       await modPage.waitForSelector(e.audioModal, c.ELEMENT_WAIT_LONGER_TIME);
       await userPage.waitForSelector(e.audioModal, c.ELEMENT_WAIT_LONGER_TIME);
     }
+
+    pages.forEach(async (currentPage) => {
+      await currentPage.page.close();
+    })
   }
 
   async usersJoinExceddingParticipantsLimit() {

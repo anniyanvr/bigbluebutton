@@ -31,6 +31,7 @@ require 'yaml'
 require 'builder'
 require 'fastimage' # require fastimage to get the image size of the slides (gem install fastimage)
 require 'json'
+require "active_support"
 
 # This script lives in scripts/archive/steps while properties.yaml lives in scripts/
 bbb_props = BigBlueButton.read_props
@@ -39,7 +40,7 @@ filepathPresOverride = "/etc/bigbluebutton/recording/presentation.yml"
 hasOverride = File.file?(filepathPresOverride)
 if (hasOverride)
   presOverrideProps = YAML::load(File.open(filepathPresOverride))
-  $presentation_props = $presentation_props.merge(presOverrideProps)
+  @presentation_props = @presentation_props.merge(presOverrideProps)
 end
 
 # There's a couple of places where stuff is mysteriously divided or multiplied
@@ -382,6 +383,30 @@ def svg_render_shape_poll(g, slide, shape)
                           width: width, height: height, x: x, y: y)
 end
 
+def build_tldraw_shape(image_shapes, slide, shape)
+  shape_in = shape[:in]
+  shape_out = shape[:out]
+
+  if shape_in == shape_out
+    BigBlueButton.logger.info("Draw #{shape[:shape_id]} Shape #{shape[:shape_unique_id]} is never shown (duration rounds to 0)")
+    return
+  end
+
+  if (shape_in >= slide[:out]) || (!shape[:out].nil? && shape[:out] <= slide[:in])
+    BigBlueButton.logger.info("Draw #{shape[:shape_id]} Shape #{shape[:shape_unique_id]} is not visible during image time span")
+    return
+  end
+
+  tldraw_shape = {
+    id: shape[:shape_id],
+    timestamp: shape_in,
+    undo: (shape[:undo].nil? ? -1 : shape[:undo]),
+    shape_data: shape[:shape_data]
+  } 
+
+  image_shapes.push(tldraw_shape)
+end
+
 def svg_render_shape(canvas, slide, shape, image_id)
   shape_in = shape[:in]
   shape_out = shape[:out]
@@ -426,7 +451,7 @@ def svg_render_shape(canvas, slide, shape, image_id)
 end
 
 @svg_image_id = 1
-def svg_render_image(svg, slide, shapes)
+def svg_render_image(svg, slide, shapes, tldraw, tldraw_shapes)
   slide_number = slide[:slide]
   presentation = slide[:presentation]
   slide_in = slide[:in]
@@ -458,37 +483,52 @@ def svg_render_image(svg, slide, shapes)
 
   shapes = shapes[presentation][slide_number]
 
-  canvas = doc.create_element('g',
-                              class: 'canvas', id: "canvas#{image_id}",
-                              image: "image#{image_id}", display: 'none')
+  if !tldraw
+    canvas = doc.create_element('g',
+                                class: 'canvas', id: "canvas#{image_id}",
+                                image: "image#{image_id}", display: 'none')
 
-  shapes.each do |shape|
-    svg_render_shape(canvas, slide, shape, image_id)
+    shapes.each do |shape|
+      svg_render_shape(canvas, slide, shape, image_id)
+    end
+
+    svg << canvas unless canvas.element_children.empty?
+  else 
+    image_shapes = []
+
+    shapes.each do |shape|
+        build_tldraw_shape(image_shapes, slide, shape)
+    end
+
+    tldraw_shapes[image_id] = { :shapes=>image_shapes, :timestamp=> slide_in}
   end
-
-  svg << canvas unless canvas.element_children.empty?
 end
 
-def panzoom_viewbox(panzoom)
+def panzoom_viewbox(panzoom, tldraw)
   if panzoom[:deskshare]
     panzoom[:x_offset] = panzoom[:y_offset] = 0.0
     panzoom[:width_ratio] = panzoom[:height_ratio] = 100.0
   end
 
-  x = (-panzoom[:x_offset] * MAGIC_MYSTERY_NUMBER / 100.0 * panzoom[:width]).round(5)
-  y = (-panzoom[:y_offset] * MAGIC_MYSTERY_NUMBER / 100.0 * panzoom[:height]).round(5)
+  if tldraw
+    x = panzoom[:x_offset]
+    y = panzoom[:y_offset]
+  else 
+    x = (-panzoom[:x_offset] * MAGIC_MYSTERY_NUMBER / 100.0 * panzoom[:width]).round(5)
+    y = (-panzoom[:y_offset] * MAGIC_MYSTERY_NUMBER / 100.0 * panzoom[:height]).round(5)
+  end
   w = shape_scale_width(panzoom, panzoom[:width_ratio])
   h = shape_scale_height(panzoom, panzoom[:height_ratio])
 
   [x, y, w, h]
 end
 
-def panzooms_emit_event(rec, panzoom)
+def panzooms_emit_event(rec, panzoom, tldraw)
   panzoom_in = panzoom[:in]
   return if panzoom_in == panzoom[:out]
 
   rec.event(timestamp: panzoom_in) do
-    x, y, w, h = panzoom_viewbox(panzoom)
+    x, y, w, h = panzoom_viewbox(panzoom, tldraw)
     rec.viewBox("#{x} #{y} #{w} #{h}")
   end
 end
@@ -497,14 +537,14 @@ def convert_cursor_coordinate(cursor_coord, panzoom_offset, panzoom_ratio)
   (((cursor_coord / 100.0) + (panzoom_offset * MAGIC_MYSTERY_NUMBER / 100.0)) / (panzoom_ratio / 100.0)).round(5)
 end
 
-def cursors_emit_event(rec, cursor)
+def cursors_emit_event(rec, cursor, tldraw)
   cursor_in = cursor[:in]
   return if cursor_in == cursor[:out]
 
   rec.event(timestamp: cursor_in) do
     panzoom = cursor[:panzoom]
     if cursor[:visible]
-      if @version_atleast_2_0_0
+      if @version_atleast_2_0_0 && !tldraw
         # In BBB 2.0, the cursor now uses the same coordinate system as annotations
         # Use the panzoom information to convert it to be relative to viewbox
         x = convert_cursor_coordinate(cursor[:x], panzoom[:x_offset], panzoom[:width_ratio])
@@ -533,6 +573,70 @@ def determine_slide_number(slide, current_slide)
   slide = slide.text.to_i
   slide -= 1 unless @version_atleast_0_9_0
   slide
+end
+
+def clean_arrow_end_or_start_props(props)
+  if props['type'] == 'binding'
+    # Remove 'x' and 'y' for 'binding' type
+    props = props.except('x', 'y')
+  elsif props['type'] == 'point'
+    # Remove unwanted properties for 'point' type
+    props = props.except('boundShapeId', 'normalizedAnchor', 'isExact', 'isPrecise')
+  end
+  props
+end
+
+def events_parse_tldraw_shape(shapes, event, current_presentation, current_slide, timestamp)
+  presentation = event.at_xpath('presentation')
+  slide = event.at_xpath('pageNumber')
+
+  presentation = determine_presentation(presentation, current_presentation)
+  slide = determine_slide_number(slide, current_slide)
+
+  # Set up the shapes data structures if needed
+  shapes[presentation] ||= {}
+  shapes[presentation][slide] ||= []
+
+  # We only need to deal with shapes for this slide
+  shapes = shapes[presentation][slide]
+
+  # Set up the structure for this shape
+  shape = {}
+  # Common properties
+  shape[:in] = timestamp
+  shape_data = shape[:shape_data] = JSON.parse(event.at_xpath('shapeData'))
+
+  user_id = event.at_xpath('userId')&.text
+  shape[:user_id] = user_id if user_id
+
+  shape_id = event.at_xpath('shapeId')&.text
+  shape[:id] = shape_id if shape_id
+
+  draw_id = shape[:shape_id] = @svg_shape_id
+  @svg_shape_id += 1
+
+  # Find the previous shape, for updates
+  prev_shape = nil
+  if shape_id
+    # If we have a shape ID, look up the previous shape by ID
+    prev_shape_pos = shapes.rindex { |s| s[:id] == shape_id }
+    prev_shape = prev_shape_pos ? shapes[prev_shape_pos] : nil
+  end
+  if prev_shape
+    prev_shape[:out] = timestamp
+    shape[:shape_unique_id] = prev_shape[:shape_unique_id]
+    shape[:shape_data] = prev_shape[:shape_data].deep_merge(shape[:shape_data])
+    # special handling to remove unwanted merged arrow props in tldraw v2
+    if shape[:shape_data]['type'] == 'arrow' && shape[:shape_data].key?('props')
+      shape[:shape_data]['props']['start'] = clean_arrow_end_or_start_props(shape[:shape_data]['props']['start'])
+      shape[:shape_data]['props']['end'] = clean_arrow_end_or_start_props(shape[:shape_data]['props']['end'])
+    end
+  else
+    shape[:shape_unique_id] = @svg_shape_unique_id
+    @svg_shape_unique_id += 1
+  end
+
+  shapes << shape
 end
 
 def events_parse_shape(shapes, event, current_presentation, current_slide, timestamp)
@@ -734,7 +838,7 @@ def events_parse_clear(shapes, event, current_presentation, current_slide, times
   end
 end
 
-def events_get_image_info(slide)
+def events_get_image_info(slide, tldraw)
   slide_deskshare = slide[:deskshare]
   slide_presentation = slide[:presentation]
 
@@ -744,7 +848,8 @@ def events_get_image_info(slide)
     slide[:src] = 'presentation/logo.png'
   else
     slide_nr = slide[:slide] + 1
-    slide[:src] = "presentation/#{slide_presentation}/slide-#{slide_nr}.png"
+    tldraw ? slide[:src] = "presentation/#{slide_presentation}/svgs/slide#{slide_nr}.svg"
+           : slide[:src] = "presentation/#{slide_presentation}/slide-#{slide_nr}.png"
     slide[:text] = "presentation/#{slide_presentation}/textfiles/slide-#{slide_nr}.txt"
   end
   image_path = "#{@process_dir}/#{slide[:src]}"
@@ -753,15 +858,19 @@ def events_get_image_info(slide)
     BigBlueButton.logger.warn("Missing image file #{image_path}!")
     # Emergency last-ditch blank image creation
     FileUtils.mkdir_p(File.dirname(image_path))
-    command = \
-      if slide_deskshare
-        ['convert', '-size',
-         "#{@presentation_props['deskshare_output_width']}x#{@presentation_props['deskshare_output_height']}", 'xc:transparent', '-background', 'transparent', image_path,]
-      else
-        ['convert', '-size', '1600x1200', 'xc:transparent', '-background', 'transparent', '-quality', '90', '+dither',
-         '-depth', '8', '-colors', '256', image_path,]
-      end
-    BigBlueButton.exec_ret(*command) || raise("Unable to generate blank image for #{image_path}")
+    if image_path.end_with?(".svg")
+      File.write(image_path, '<svg version="1.1" width="1600" height="1600" xmlns="http://www.w3.org/2000/svg"></svg>')
+    else
+      command = \
+        if slide_deskshare
+          ['convert', '-size',
+           "#{@presentation_props['deskshare_output_width']}x#{@presentation_props['deskshare_output_height']}", 'xc:transparent', '-background', 'transparent', image_path,]
+        else
+          ['convert', '-size', '1600x1200', 'xc:transparent', '-background', 'transparent', '-quality', '90', '+dither',
+           '-depth', '8', '-colors', '256', image_path,]
+        end
+      BigBlueButton.exec_ret(*command) || raise("Unable to generate blank image for #{image_path}")
+    end
   end
 
   slide[:width], slide[:height] = FastImage.size(image_path)
@@ -792,6 +901,7 @@ def process_presentation(package_dir)
   # Current pan/zoom state
   current_x_offset = current_y_offset = 0.0
   current_width_ratio = current_height_ratio = 100.0
+  current_x_camera = current_y_camera = current_zoom = 0.0  
   # Current cursor status
   cursor_x = cursor_y = -1.0
   cursor_visible = false
@@ -802,6 +912,8 @@ def process_presentation(package_dir)
   panzooms = []
   cursors = []
   shapes = {}
+  tldraw = @version_atleast_2_6_0
+  tldraw_shapes = {'bbb_version': BigBlueButton::Events.bbb_version(@doc)}
 
   # Iterate through the events.xml and store the events, building the
   # xml files as we go
@@ -848,7 +960,10 @@ def process_presentation(package_dir)
     when 'AddShapeEvent', 'ModifyTextEvent'
       events_parse_shape(shapes, event, current_presentation, current_slide, timestamp)
 
-    when 'UndoShapeEvent', 'UndoAnnotationEvent'
+    when 'AddTldrawShapeEvent'
+      events_parse_tldraw_shape(shapes, event, current_presentation, current_slide, timestamp)
+
+    when 'UndoShapeEvent', 'UndoAnnotationEvent', 'DeleteTldrawShapeEvent'
       events_parse_undo(shapes, event, current_presentation, current_slide, timestamp)
 
     when 'ClearPageEvent', 'ClearWhiteboardEvent'
@@ -887,7 +1002,7 @@ def process_presentation(package_dir)
       else
         if slide
           slide[:out] = timestamp
-          svg_render_image(svg, slide, shapes)
+          svg_render_image(svg, slide, shapes, tldraw, tldraw_shapes)
         end
 
         BigBlueButton.logger.info("Presentation #{current_presentation} Slide #{current_slide} Deskshare #{deskshare}")
@@ -897,7 +1012,7 @@ def process_presentation(package_dir)
           in: timestamp,
           deskshare: deskshare,
         }
-        events_get_image_info(slide)
+        events_get_image_info(slide, tldraw)
         slides << slide
       end
     end
@@ -921,7 +1036,7 @@ def process_presentation(package_dir)
       else
         if panzoom
           panzoom[:out] = timestamp
-          panzooms_emit_event(panzooms_rec, panzoom)
+          panzooms_emit_event(panzooms_rec, panzoom, tldraw)
         end
         BigBlueButton.logger.info("Panzoom: #{current_x_offset} #{current_y_offset} #{current_width_ratio} #{current_height_ratio} (#{slide_width}x#{slide_height})")
         panzoom = {
@@ -940,8 +1055,10 @@ def process_presentation(package_dir)
 
     # Perform cursor finalization
     if cursor_changed || panzoom_changed
-      unless cursor_x >= 0 && cursor_x <= 100 &&
-          cursor_y >= 0 && cursor_y <= 100
+      if cursor_x < 0 || cursor_y < 0
+        cursor_visible = false
+      end
+      if (cursor_x >= 100 || cursor_y >= 100) && !tldraw
         cursor_visible = false
       end
 
@@ -955,7 +1072,7 @@ def process_presentation(package_dir)
       else
         if cursor
           cursor[:out] = timestamp
-          cursors_emit_event(cursors_rec, cursor)
+          cursors_emit_event(cursors_rec, cursor, tldraw)
         end
         cursor = {
           visible: cursor_visible,
@@ -972,26 +1089,27 @@ def process_presentation(package_dir)
   # Add the last slide, panzoom, and cursor
   slide = slides.last
   slide[:out] = last_timestamp
-  svg_render_image(svg, slide, shapes)
+  svg_render_image(svg, slide, shapes, tldraw, tldraw_shapes)
   panzoom = panzooms.last
   panzoom[:out] = last_timestamp
-  panzooms_emit_event(panzooms_rec, panzoom)
+  panzooms_emit_event(panzooms_rec, panzoom, tldraw)
   cursor = cursors.last
   cursor[:out] = last_timestamp
-  cursors_emit_event(cursors_rec, cursor)
+  cursors_emit_event(cursors_rec, cursor, tldraw)
 
   cursors_doc = Builder::XmlMarkup.new(indent: 2)
   cursors_doc.instruct!
-  cursors_doc.recording(id: 'cursor_events') { |xml| xml << cursors_rec.target! }
+  cursors_doc.recording(id: 'cursor_events', tldraw: tldraw) { |xml| xml << cursors_rec.target! }
 
   panzooms_doc = Builder::XmlMarkup.new(indent: 2)
   panzooms_doc.instruct!
-  panzooms_doc.recording(id: 'panzoom_events') { |xml| xml << panzooms_rec.target! }
+  panzooms_doc.recording(id: 'panzoom_events', tldraw: tldraw) { |xml| xml << panzooms_rec.target! }
 
   # And save the result
   File.write("#{package_dir}/#{@shapes_svg_filename}", shapes_doc.to_xml)
   File.write("#{package_dir}/#{@panzooms_xml_filename}", panzooms_doc.target!)
   File.write("#{package_dir}/#{@cursor_xml_filename}", cursors_doc.target!)
+  generate_json_file(package_dir, @tldraw_shapes_filename, tldraw_shapes) if tldraw
 end
 
 def process_chat_messages(events, bbb_props)
@@ -1003,18 +1121,30 @@ def process_chat_messages(events, bbb_props)
     BigBlueButton::Events.get_chat_events(events, @meeting_start.to_i, @meeting_end.to_i, bbb_props).each do |chat|
       chattimeline = {
         in: (chat[:in] / 1000.0).round(1),
+        id: chat[:id],
         direction: 'down',
         name: chat[:sender],
         chatEmphasizedText: chat[:chatEmphasizedText],
         senderRole: chat[:senderRole],
         message: chat[:message],
+        replyToMessageId: chat[:replyToMessageId],
+        lastEditedTimestamp: chat[:lastEditedTimestamp],
         target: 'chat',
       }
       if (chat[:out])
         chattimeline[:out] = (chat[:out] / 1000.0).round(1)
       end
 
-      xml.chattimeline(**chattimeline)
+      xml.chattimeline(**chattimeline) do
+        # Add reactions only if present
+        if chat[:reactions]
+          xml.reactions do
+            chat[:reactions].each do |emoji, count|
+              xml.reaction(emoji: emoji, count: count)
+            end
+          end
+        end
+      end
     end
   end
 
@@ -1166,10 +1296,30 @@ def copy_media_files_helper(media, media_files, package_dir)
   end
 end
 
+def process_swap_events(events)
+  BigBlueButton.logger.info("Processing screenshare as content events")
+  swap_events = BigBlueButton::Events.get_screenshare_as_content_events(events)
+  @layout_swap_xml = Builder::XmlMarkup.new(indent: 2)
+  @layout_swap_xml.instruct!
+
+  @layout_swap_xml.recording('id' => 'layout_swap_events') do
+    swap_events.each do |event|
+      @layout_swap_xml.event(
+        timestamp: (translate_timestamp(event[:timestamp].to_f) / 1000).round(1),
+        show_screenshare: event[:screenshareAsContent],
+      )
+    end
+  end
+
+
+end
+
 @shapes_svg_filename = 'shapes.svg'
 @panzooms_xml_filename = 'panzooms.xml'
 @cursor_xml_filename = 'cursor.xml'
 @deskshare_xml_filename = 'deskshare.xml'
+@tldraw_shapes_filename = 'tldraw.json'
+@layout_xml_filename = 'layout.xml'
 @svg_shape_id = 1
 @svg_shape_unique_id = 1
 
@@ -1267,6 +1417,9 @@ begin
         @version_atleast_2_0_0 = BigBlueButton::Events.bbb_version_compare(
           @doc, 2, 0, 0
         )
+        @version_atleast_2_6_0 = BigBlueButton::Events.bbb_version_compare(
+          @doc, 2, 6, 0
+        )
         BigBlueButton.logger.info('Creating metadata.xml')
 
         #### INSTEAD OF CREATING THE WHOLE metadata.xml FILE AGAIN, ONLY ADD <playback>
@@ -1326,12 +1479,16 @@ begin
 
         process_deskshare_events(@doc)
 
+        process_swap_events(@doc)
+
         process_poll_events(@doc, package_dir)
 
         process_external_video_events(@doc, package_dir)
 
         # Write deskshare.xml to file
         File.open("#{package_dir}/#{@deskshare_xml_filename}", 'w') { |f| f.puts @deskshare_xml.target! }
+        # Write layout_swap.xml to file
+        File.open("#{package_dir}/#{@layout_xml_filename}", 'w') { |f| f.puts @layout_swap_xml.target! }
 
         BigBlueButton.logger.info('Copying files to package dir')
         FileUtils.cp_r("#{@process_dir}/presentation", package_dir)

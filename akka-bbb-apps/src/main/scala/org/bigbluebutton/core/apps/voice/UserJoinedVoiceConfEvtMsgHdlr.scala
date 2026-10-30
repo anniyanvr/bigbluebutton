@@ -2,10 +2,11 @@ package org.bigbluebutton.core.apps.voice
 
 import org.bigbluebutton.SystemConfiguration
 import org.bigbluebutton.common2.msgs._
+import org.bigbluebutton.core.db.NotificationDAO
 import org.bigbluebutton.core.running.{ LiveMeeting, MeetingActor, OutMsgRouter }
 import org.bigbluebutton.core2.message.senders.MsgBuilder
 import org.bigbluebutton.core.models._
-import org.bigbluebutton.core.apps.users.UsersApp
+import org.bigbluebutton.core.util.ColorPicker
 import org.bigbluebutton.core2.MeetingStatus2x
 
 trait UserJoinedVoiceConfEvtMsgHdlr extends SystemConfiguration {
@@ -18,6 +19,7 @@ trait UserJoinedVoiceConfEvtMsgHdlr extends SystemConfiguration {
 
     val guestPolicy = GuestsWaiting.getGuestPolicy(liveMeeting.guestsWaiting)
     val isDialInUser = msg.body.intId.startsWith(IntIdPrefixType.DIAL_IN)
+    val userColor = ColorPicker.nextColor(liveMeeting.props.meetingProp.intId)
 
     def notifyModeratorsOfGuestWaiting(guest: GuestWaiting, users: Users2x, meetingId: String): Unit = {
       val moderators = Users2x.findAll(users).filter(p => p.role == Roles.MODERATOR_ROLE)
@@ -28,41 +30,78 @@ trait UserJoinedVoiceConfEvtMsgHdlr extends SystemConfiguration {
       // bbb-html should only listen for this single message
       val event = MsgBuilder.buildGuestsWaitingForApprovalEvtMsg(meetingId, "nodeJSapp", Vector(guest))
       outGW.send(event)
+
+      val notifyEvent = MsgBuilder.buildNotifyRoleInMeetingEvtMsg(
+        Roles.MODERATOR_ROLE,
+
+        liveMeeting.props.meetingProp.intId,
+        "info",
+        "user",
+        "app.userList.guest.pendingGuestAlert",
+        "Notification that a new guest user joined the session",
+        Vector(s"${guest.name}")
+      )
+      outGW.send(notifyEvent)
+      NotificationDAO.insert(notifyEvent)
     }
 
     def registerUserInRegisteredUsers() = {
-      val regUser = RegisteredUsers.create(msg.body.intId, msg.body.voiceUserId,
-        msg.body.callerIdName, Roles.VIEWER_ROLE, "",
-        "", true, true, GuestStatus.WAIT, true, false)
-      RegisteredUsers.add(liveMeeting.registeredUsers, regUser)
+      val regUser = RegisteredUsers.create(liveMeeting.props.meetingProp.intId, msg.body.intId, msg.body.voiceUserId,
+        msg.body.callerIdName, "", "", Roles.VIEWER_ROLE, msg.body.intId, Vector(""), "", "", userColor, false,
+        true, true, GuestStatus.WAIT, true, "", "", Map(), false)
+      RegisteredUsers.add(liveMeeting.registeredUsers, regUser, liveMeeting.props.meetingProp.intId)
     }
 
     def registerUserInUsers2x() = {
       val newUser = UserState(
         intId = msg.body.intId,
         extId = msg.body.voiceUserId,
+        meetingId = liveMeeting.props.meetingProp.intId,
         name = msg.body.callerIdName,
         role = Roles.VIEWER_ROLE,
+        bot = false,
         guest = true,
         authed = true,
         guestStatus = GuestStatus.WAIT,
-        emoji = "none",
+        reactionEmoji = "none",
+        raiseHand = false,
+        away = false,
         pin = false,
+        mobile = false,
         presenter = false,
         locked = MeetingStatus2x.getPermissions(liveMeeting.status).lockOnJoin,
         avatar = "",
-        clientType = "",
-        pickExempted = false,
+        webcamBackground = "",
+        color = userColor,
+        clientType = if (isDialInUser) "dial-in-user" else "",
         userLeftFlag = UserLeftFlag(false, 0)
       )
       Users2x.add(liveMeeting.users2x, newUser)
     }
 
     def registerUserAsGuest() = {
-      if (GuestsWaiting.findWithIntId(liveMeeting.guestsWaiting, msg.body.intId) == None) {
-        val guest = GuestWaiting(msg.body.intId, msg.body.callerIdName, Roles.VIEWER_ROLE, true, "", true, System.currentTimeMillis())
+      if (GuestsWaiting.findWithIntId(liveMeeting.guestsWaiting, msg.body.intId).isEmpty) {
+        val guest = GuestWaiting(
+          msg.body.intId,
+          msg.body.callerIdName,
+          Roles.VIEWER_ROLE,
+          guest = true,
+          avatar = "",
+          webcamBackground = "",
+          userColor,
+          authenticated = true,
+          System.currentTimeMillis()
+        )
         GuestsWaiting.add(liveMeeting.guestsWaiting, guest)
         notifyModeratorsOfGuestWaiting(guest, liveMeeting.users2x, liveMeeting.props.meetingProp.intId)
+
+        VoiceApp.toggleUserAudioInVoiceConf(
+          liveMeeting,
+          outGW,
+          msg.body.intId,
+          msg.body.voiceUserId,
+          enabled = false
+        )
       }
     }
 
@@ -77,9 +116,12 @@ trait UserJoinedVoiceConfEvtMsgHdlr extends SystemConfiguration {
         msg.body.callingWith,
         msg.body.callerIdName,
         msg.body.callerIdNum,
+        userColor,
         msg.body.muted,
         msg.body.talking,
-        "freeswitch"
+        "freeswitch",
+        msg.body.hold,
+        msg.body.uuid
       )
     }
 
@@ -96,14 +138,18 @@ trait UserJoinedVoiceConfEvtMsgHdlr extends SystemConfiguration {
       if (isDialInUser) {
         registerUserInRegisteredUsers()
         registerUserInUsers2x()
-        guestPolicy match {
-          case GuestPolicy(policy, setBy) => {
-            policy match {
-              case GuestPolicyType.ALWAYS_ACCEPT => letUserEnter()
-              case GuestPolicyType.ALWAYS_DENY   => VoiceApp.removeUserFromVoiceConf(liveMeeting, outGW, msg.body.voiceUserId)
-              case GuestPolicyType.ASK_MODERATOR => registerUserAsGuest()
+        if (dialInEnforceGuestPolicy) {
+          guestPolicy match {
+            case GuestPolicy(policy, setBy) => {
+              policy match {
+                case GuestPolicyType.ALWAYS_ACCEPT => letUserEnter()
+                case GuestPolicyType.ALWAYS_DENY   => VoiceApp.removeUserFromVoiceConf(liveMeeting, outGW, msg.body.voiceUserId)
+                case GuestPolicyType.ASK_MODERATOR => registerUserAsGuest()
+              }
             }
           }
+        } else {
+          letUserEnter()
         }
       } else {
         // Regular users reach this point after beeing

@@ -1,55 +1,52 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
-import { throttle } from 'lodash';
 import { defineMessages, injectIntl } from 'react-intl';
-import Modal from 'react-modal';
+import ReactModal from 'react-modal';
 import browserInfo from '/imports/utils/browserInfo';
 import deviceInfo from '/imports/utils/deviceInfo';
+import Session from '/imports/ui/services/storage/in-memory';
 import PollingContainer from '/imports/ui/components/polling/container';
 import logger from '/imports/startup/client/logger';
 import ActivityCheckContainer from '/imports/ui/components/activity-check/container';
-import UserInfoContainer from '/imports/ui/components/user-info/container';
-import BreakoutRoomInvitation from '/imports/ui/components/breakout-room/invitation/container';
-import { Meteor } from 'meteor/meteor';
 import ToastContainer from '/imports/ui/components/common/toast/container';
-import PadsSessionsContainer from '/imports/ui/components/pads/sessions/container';
-import ModalContainer from '/imports/ui/components/common/modal/container';
+import WakeLockContainer from '../wake-lock/container';
 import NotificationsBarContainer from '../notifications-bar/container';
 import AudioContainer from '../audio/container';
-import ChatAlertContainer from '../chat/alert/container';
 import BannerBarContainer from '/imports/ui/components/banner-bar/container';
-import StatusNotifier from '/imports/ui/components/status-notifier/container';
+import RaiseHandNotifier from '/imports/ui/components/raisehand-notifier/container';
 import ManyWebcamsNotifier from '/imports/ui/components/video-provider/many-users-notify/container';
+import AudioCaptionsSpeechContainer from '/imports/ui/components/audio/audio-graphql/audio-captions/speech/component';
 import UploaderContainer from '/imports/ui/components/presentation/presentation-uploader/container';
-import CaptionsSpeechContainer from '/imports/ui/components/captions/speech/container';
-import RandomUserSelectContainer from '/imports/ui/components/common/modal/random-user/container';
-import NewWebcamContainer from '../webcam/container';
-import PresentationAreaContainer from '../presentation/presentation-area/container';
+import ScreenReaderAlertContainer from '../screenreader-alert/container';
+import ScreenReaderAlertAdapter from '../screenreader-alert/adapter';
+import WebcamContainer from '../webcam/component';
+import PresentationContainer from '../presentation/container';
 import ScreenshareContainer from '../screenshare/container';
-import ExternalVideoContainer from '../external-video-player/container';
+import ExternalVideoPlayerContainer from '../external-video-player/external-video-player-graphql/component';
+import GenericContentMainAreaContainer from '../generic-content/generic-main-content/container';
+import EmojiRainContainer from '../emoji-rain/container';
 import Styled from './styles';
-import { DEVICE_TYPE, ACTIONS, SMALL_VIEWPORT_BREAKPOINT } from '../layout/enums';
-import {
-  isMobile, isTablet, isTabletPortrait, isTabletLandscape, isDesktop,
-} from '../layout/utils';
 import LayoutEngine from '../layout/layout-manager/layoutEngine';
 import NavBarContainer from '../nav-bar/container';
 import SidebarNavigationContainer from '../sidebar-navigation/container';
 import SidebarContentContainer from '../sidebar-content/container';
-import { makeCall } from '/imports/ui/services/api';
-import ConnectionStatusService from '/imports/ui/components/connection-status/service';
-import DarkReader from 'darkreader';
-import Settings from '/imports/ui/services/settings';
-import LayoutService from '/imports/ui/components/layout/service';
-import { registerTitleView } from '/imports/utils/dom-utils';
-import Notifications from '../notifications/container';
+import PluginsEngineManager from '../plugins-engine/manager';
+import Notifications from '../notifications/component';
 import GlobalStyles from '/imports/ui/stylesheets/styled-components/globalStyles';
-
-const MOBILE_MEDIA = 'only screen and (max-width: 40em)';
-const APP_CONFIG = Meteor.settings.public.app;
-const DESKTOP_FONT_SIZE = APP_CONFIG.desktopFontSize;
-const MOBILE_FONT_SIZE = APP_CONFIG.mobileFontSize;
-const OVERRIDE_LOCALE = APP_CONFIG.defaultSettings.application.overrideLocale;
+import ActionsBarContainer from '../actions-bar/container';
+import PushLayoutEngine from '../layout/push-layout/pushLayoutEngine';
+import NotesContainer from '/imports/ui/components/notes/component';
+import AppService from '/imports/ui/components/app/service';
+import TimeSync from './app-graphql/time-sync/component';
+import PresentationUploaderToastContainer from '/imports/ui/components/presentation/presentation-toast/presentation-uploader-toast/container';
+import BreakoutJoinConfirmationContainerGraphQL from '../breakout-join-confirmation/breakout-join-confirmation-graphql/component';
+import FloatingWindowContainer from '/imports/ui/components/floating-window/container';
+import ChatAlertContainerGraphql from '../chat/chat-graphql/alert/component';
+import { notify } from '/imports/ui/services/notification';
+import VoiceActivityAdapter from '../../core/adapters/voice-activity';
+import LayoutObserver from '../layout/observer';
+import BBBLiveKitRoomContainer from '/imports/ui/components/livekit/component';
+import { LAYOUT_TYPE } from '/imports/ui/components/layout/enums';
 
 const intlMessages = defineMessages({
   userListLabel: {
@@ -64,17 +61,9 @@ const intlMessages = defineMessages({
     id: 'app.actionsBar.label',
     description: 'Aria-label for ActionsBar Section',
   },
-  iOSWarning: {
-    id: 'app.iOSWarning.label',
-    description: 'message indicating to upgrade ios version',
-  },
-  clearedEmoji: {
-    id: 'app.toast.clearedEmoji.label',
-    description: 'message for cleared emoji status',
-  },
-  setEmoji: {
-    id: 'app.toast.setEmoji.label',
-    description: 'message when a user emoji has been set',
+  clearedReaction: {
+    id: 'app.toast.clearedReactions.label',
+    description: 'message for cleared reactions',
   },
   raisedHand: {
     id: 'app.toast.setEmoji.raiseHand',
@@ -83,6 +72,14 @@ const intlMessages = defineMessages({
   loweredHand: {
     id: 'app.toast.setEmoji.lowerHand',
     description: 'toast message for lowered hand notification',
+  },
+  away: {
+    id: 'app.toast.setEmoji.away',
+    description: 'toast message for set away notification',
+  },
+  notAway: {
+    id: 'app.toast.setEmoji.notAway',
+    description: 'toast message for remove away notification',
   },
   meetingMuteOn: {
     id: 'app.toast.meetingMuteOn.label',
@@ -98,7 +95,7 @@ const intlMessages = defineMessages({
   },
   defaultViewLabel: {
     id: 'app.title.defaultViewLabel',
-    description: 'view name apended to document title',
+    description: 'view name appended to document title',
   },
   promotedLabel: {
     id: 'app.toast.promotedLabel',
@@ -111,239 +108,162 @@ const intlMessages = defineMessages({
 });
 
 const propTypes = {
-  actionsbar: PropTypes.element,
-  captions: PropTypes.element,
-  locale: PropTypes.string,
   darkTheme: PropTypes.bool.isRequired,
+  hideNotificationToasts: PropTypes.bool.isRequired,
+  isBreakout: PropTypes.bool.isRequired,
+  meetingId: PropTypes.string.isRequired,
+  meetingName: PropTypes.string.isRequired,
 };
-
-const defaultProps = {
-  actionsbar: null,
-  captions: null,
-  locale: OVERRIDE_LOCALE || navigator.language,
-};
-
-const isLayeredView = window.matchMedia(`(max-width: ${SMALL_VIEWPORT_BREAKPOINT}px)`);
 
 class App extends Component {
-  static renderWebcamsContainer() {
-    return <NewWebcamContainer />;
-  }
-
   constructor(props) {
     super(props);
     this.state = {
-      enableResize: !window.matchMedia(MOBILE_MEDIA).matches,
+      isAudioModalOpen: false,
+      isVideoPreviewModalOpen: false,
+      presentationFitToWidth: false,
+      isJoinLogged: false,
     };
 
-    this.handleWindowResize = throttle(this.handleWindowResize).bind(this);
-    this.shouldAriaHide = this.shouldAriaHide.bind(this);
-    this.renderWebcamsContainer = App.renderWebcamsContainer.bind(this);
+    this.timeOffsetInterval = null;
 
-    this.throttledDeviceType = throttle(() => this.setDeviceType(),
-      50, { trailing: true, leading: true }).bind(this);
+    this.setPresentationFitToWidth = this.setPresentationFitToWidth.bind(this);
+    this.setAudioModalIsOpen = this.setAudioModalIsOpen.bind(this);
+    this.setVideoPreviewModalIsOpen = this.setVideoPreviewModalIsOpen.bind(this);
+    this.logJoin = this.logJoin.bind(this);
   }
 
   componentDidMount() {
-    const {
-      locale,
-      notify,
-      intl,
-      validIOSVersion,
-      layoutContextDispatch,
-      meetingLayout,
-      settingsLayout,
-      isRTL,
-      hidePresentation,
-      autoSwapLayout,
-      shouldShowScreenshare,
-      shouldShowExternalVideo,
-    } = this.props;
     const { browserName } = browserInfo;
     const { osName } = deviceInfo;
+    const { isJoinLogged } = this.state;
 
-    registerTitleView(intl.formatMessage(intlMessages.defaultViewLabel));
+    Session.setItem('videoPreviewFirstOpen', true);
 
-    layoutContextDispatch({
-      type: ACTIONS.SET_IS_RTL,
-      value: isRTL,
-    });
-
-    const presentationOpen = !(autoSwapLayout || hidePresentation)
-      || shouldShowExternalVideo || shouldShowScreenshare;
-
-    layoutContextDispatch({
-      type: ACTIONS.SET_PRESENTATION_IS_OPEN,
-      value: presentationOpen,
-    });
-
-    Modal.setAppElement('#app');
-
-    const fontSize = isMobile() ? MOBILE_FONT_SIZE : DESKTOP_FONT_SIZE;
-    document.getElementsByTagName('html')[0].lang = locale;
-    document.getElementsByTagName('html')[0].style.fontSize = fontSize;
-
-    layoutContextDispatch({
-      type: ACTIONS.SET_FONT_SIZE,
-      value: parseInt(fontSize.slice(0, -2), 10),
-    });
-
-    const currentLayout = settingsLayout || meetingLayout;
-
-    Settings.application.selectedLayout = currentLayout;
-    Settings.save();
+    ReactModal.setAppElement('#app');
 
     const body = document.getElementsByTagName('body')[0];
 
     if (browserName) {
-      body.classList.add(`browser-${browserName.split(' ').pop()
-        .toLowerCase()}`);
+      body.classList.add(`browser-${browserName.split(' ').pop().toLowerCase()}`);
     }
 
     body.classList.add(`os-${osName.split(' ').shift().toLowerCase()}`);
 
-    body.classList.add(`lang-${locale.split('-')[0]}`);
-
-    if (!validIOSVersion()) {
-      notify(
-        intl.formatMessage(intlMessages.iOSWarning), 'error', 'warning',
-      );
-    }
-
-    this.handleWindowResize();
-    window.addEventListener('resize', this.handleWindowResize, false);
-    window.addEventListener('localeChanged', () => {
-      layoutContextDispatch({
-        type: ACTIONS.SET_IS_RTL,
-        value: Settings.application.isRTL,
-      });
-    });
     window.ondragover = (e) => { e.preventDefault(); };
     window.ondrop = (e) => { e.preventDefault(); };
 
-    if (deviceInfo.isMobile) makeCall('setMobileUser');
-
-    ConnectionStatusService.startRoundTripTime();
-
-    logger.info({ logCode: 'app_component_componentdidmount' }, 'Client loaded successfully');
+    if (!isJoinLogged) {
+      this.logJoin();
+    }
   }
 
   componentDidUpdate(prevProps) {
     const {
-      notify,
-      currentUserEmoji,
+      currentUserAway,
+      currentUserRaiseHand,
       intl,
-      mountModal,
-      deviceType,
-      meetingLayout,
-      selectedLayout, // full layout name
-      settingsLayout, // shortened layout name (without Push)
-      layoutType,
-      pushLayoutToEveryone, // is layout pushed
-      layoutContextDispatch,
-      mountRandomUserModal,
+      fitToWidth,
     } = this.props;
+
+    const { isJoinLogged } = this.state;
 
     this.renderDarkMode();
 
-    if (meetingLayout !== prevProps.meetingLayout) {
-      layoutContextDispatch({
-        type: ACTIONS.SET_LAYOUT_TYPE,
-        value: meetingLayout,
-      });
-
-      Settings.application.selectedLayout = meetingLayout;
-      Settings.save();
-    }
-
-    if (selectedLayout !== prevProps.selectedLayout
-      || settingsLayout !== layoutType) {
-      layoutContextDispatch({
-        type: ACTIONS.SET_LAYOUT_TYPE,
-        value: settingsLayout,
-      });
-
-      if (pushLayoutToEveryone) {
-        LayoutService.setMeetingLayout(settingsLayout);
-      }
-    }
-
-    if (mountRandomUserModal) mountModal(<RandomUserSelectContainer />);
-
-    if (prevProps.currentUserEmoji.status !== currentUserEmoji.status) {
-      const formattedEmojiStatus = intl.formatMessage({ id: `app.actionsBar.emojiMenu.${currentUserEmoji.status}Label` })
-        || currentUserEmoji.status;
-
-      const raisedHand = currentUserEmoji.status === 'raiseHand';
-
-      let statusLabel = '';
-      if (currentUserEmoji.status === 'none') {
-        statusLabel = prevProps.currentUserEmoji.status === 'raiseHand'
-          ? intl.formatMessage(intlMessages.loweredHand)
-          : intl.formatMessage(intlMessages.clearedEmoji);
+    if (prevProps.currentUserAway !== currentUserAway) {
+      if (currentUserAway === true) {
+        notify(intl.formatMessage(intlMessages.away), 'info', 'user');
       } else {
-        statusLabel = raisedHand
-          ? intl.formatMessage(intlMessages.raisedHand)
-          : intl.formatMessage(intlMessages.setEmoji, ({ 0: formattedEmojiStatus }));
+        notify(intl.formatMessage(intlMessages.notAway), 'info', 'clear_status');
       }
-
-      notify(
-        statusLabel,
-        'info',
-        currentUserEmoji.status === 'none'
-          ? 'clear_status'
-          : 'user',
-      );
     }
 
-    if (deviceType === null || prevProps.deviceType !== deviceType) this.throttledDeviceType();
+    if (prevProps.currentUserRaiseHand !== currentUserRaiseHand) {
+      if (currentUserRaiseHand === true) {
+        notify(intl.formatMessage(intlMessages.raisedHand), 'info', 'user');
+      } else {
+        notify(intl.formatMessage(intlMessages.loweredHand), 'info', 'clear_status');
+      }
+    }
+
+    if (prevProps.fitToWidth !== fitToWidth) {
+      this.setState({ presentationFitToWidth: fitToWidth });
+    }
+
+    if (!isJoinLogged) {
+      this.logJoin();
+    }
   }
 
   componentWillUnmount() {
-    window.removeEventListener('resize', this.handleWindowResize, false);
-    ConnectionStatusService.stopRoundTripTime();
-  }
+    window.onbeforeunload = null;
 
-  handleWindowResize() {
-    const { enableResize } = this.state;
-    const shouldEnableResize = !window.matchMedia(MOBILE_MEDIA).matches;
-    if (enableResize === shouldEnableResize) return;
-
-    this.setState({ enableResize: shouldEnableResize });
-    this.throttledDeviceType();
-  }
-
-  setDeviceType() {
-    const { deviceType, layoutContextDispatch } = this.props;
-    let newDeviceType = null;
-    if (isMobile()) newDeviceType = DEVICE_TYPE.MOBILE;
-    if (isTablet()) newDeviceType = DEVICE_TYPE.TABLET;
-    if (isTabletPortrait()) newDeviceType = DEVICE_TYPE.TABLET_PORTRAIT;
-    if (isTabletLandscape()) newDeviceType = DEVICE_TYPE.TABLET_LANDSCAPE;
-    if (isDesktop()) newDeviceType = DEVICE_TYPE.DESKTOP;
-
-    if (newDeviceType !== deviceType) {
-      layoutContextDispatch({
-        type: ACTIONS.SET_DEVICE_TYPE,
-        value: newDeviceType,
-      });
+    if (this.timeOffsetInterval) {
+      clearInterval(this.timeOffsetInterval);
     }
   }
 
-  shouldAriaHide() {
-    const { sidebarNavigationIsOpen, sidebarContentIsOpen, isPhone } = this.props;
-    return sidebarNavigationIsOpen
-      && sidebarContentIsOpen
-      && (isPhone || isLayeredView.matches);
+  setPresentationFitToWidth(presentationFitToWidth) {
+    const { handlePresentationFitToWidth } = this.props;
+    handlePresentationFitToWidth(presentationFitToWidth);
+    this.setState({ presentationFitToWidth });
   }
 
-  renderCaptions() {
+  setAudioModalIsOpen(value) {
+    this.setState({ isAudioModalOpen: value });
+  }
+
+  setVideoPreviewModalIsOpen(value) {
+    this.setState({ isVideoPreviewModalOpen: value });
+  }
+
+  logJoin() {
+    const { isJoinLogged } = this.state;
+    const { meetingId, meetingName, isBreakout } = this.props;
+
+    const logMessage = isBreakout ? 'User joined breakout room' : 'User joined main room';
+
+    if (!isJoinLogged && meetingId) {
+      logger.info({
+        logCode: 'app_component_componentdidmount',
+        extraInfo: {
+          meetingId,
+          meetingName,
+        },
+      }, logMessage);
+      this.setState({ isJoinLogged: true });
+    }
+  }
+
+  renderDarkMode() {
+    const { darkTheme } = this.props;
+
+    AppService.setDarkTheme(darkTheme);
+  }
+
+  renderActionsBar() {
     const {
-      captions,
+      hideActionsBar,
+      presentationIsOpen,
+    } = this.props;
+
+    if (hideActionsBar) return null;
+
+    return (
+      <ActionsBarContainer
+        presentationIsOpen={presentationIsOpen}
+        setPresentationFitToWidth={this.setPresentationFitToWidth}
+      />
+    );
+  }
+
+  renderAudioCaptions() {
+    const {
+      audioCaptions,
       captionsStyle,
     } = this.props;
 
-    if (!captions) return null;
+    if (!audioCaptions) return null;
 
     return (
       <Styled.CaptionsWrapper
@@ -357,96 +277,120 @@ class App extends Component {
           }
         }
       >
-        {captions}
+        {audioCaptions}
       </Styled.CaptionsWrapper>
     );
   }
 
-  renderActionsBar() {
-    const {
-      actionsbar,
-      intl,
-      actionsBarStyle,
-      hideActionsBar,
-    } = this.props;
-
-    if (!actionsbar || hideActionsBar) return null;
-
-    return (
-      <Styled.ActionsBar
-        id="ActionsBar"
-        role="region"
-        aria-label={intl.formatMessage(intlMessages.actionsBarLabel)}
-        aria-hidden={this.shouldAriaHide()}
-        style={
-          {
-            position: 'absolute',
-            top: actionsBarStyle.top,
-            left: actionsBarStyle.left,
-            height: actionsBarStyle.height,
-            width: actionsBarStyle.width,
-            padding: actionsBarStyle.padding,
-          }
-        }
-      >
-        {actionsbar}
-      </Styled.ActionsBar>
-    );
-  }
-
-  renderActivityCheck() {
-    const { User } = this.props;
-
-    const { inactivityCheck, responseDelay } = User;
-
-    return (inactivityCheck ? (
-      <ActivityCheckContainer
-        inactivityCheck={inactivityCheck}
-        responseDelay={responseDelay}
-      />
-    ) : null);
-  }
-
-  renderUserInformation() {
-    const { UserInfo, User } = this.props;
-
-    return (UserInfo.length > 0 ? (
-      <UserInfoContainer
-        UserInfo={UserInfo}
-        requesterUserId={User.userId}
-        meetingId={User.meetingId}
-      />
-    ) : null);
-  }
-
-  renderDarkMode() {
-    const { darkTheme } = this.props;
-
-    return darkTheme
-      ? DarkReader.enable(
-        { brightness: 100, contrast: 90 },
-        { invert: [Styled.DtfInvert], ignoreInlineStyle: [Styled.DtfCss] },
-      )
-      : DarkReader.disable();
-  }
-
   render() {
     const {
-      customStyle,
-      customStyleUrl,
-      audioAlertEnabled,
-      pushAlertEnabled,
+      shouldShowExternalVideo,
       shouldShowPresentation,
       shouldShowScreenshare,
-      shouldShowExternalVideo,
-      isPresenter,
-      layoutType,
+      isSharedNotesPinned,
+      presentationIsOpen,
+      darkTheme,
+      intl,
+      pluginConfig,
+      genericMainContentId,
+      hideNotificationToasts,
+      selectedLayout,
+      isNotificationEnabled,
+      isNonMediaLayout,
     } = this.props;
 
+    const {
+      isAudioModalOpen,
+      isVideoPreviewModalOpen,
+      presentationFitToWidth,
+    } = this.state;
+
+    if (selectedLayout !== LAYOUT_TYPE.PRESENTATION_ONLY) {
+      return (
+        <>
+          <ScreenReaderAlertAdapter />
+          <PluginsEngineManager pluginConfig={pluginConfig} />
+          <FloatingWindowContainer />
+          <TimeSync />
+          <Notifications />
+          <PushLayoutEngine
+            shouldShowScreenshare={shouldShowScreenshare}
+            shouldShowExternalVideo={shouldShowExternalVideo}
+          />
+          <LayoutEngine />
+          <LayoutObserver />
+          <GlobalStyles />
+          <Styled.Layout
+            id="layout"
+            style={{
+              width: '100%',
+              height: '100%',
+            }}
+          >
+            <ActivityCheckContainer />
+            <ScreenReaderAlertContainer />
+            <BannerBarContainer />
+            <NotificationsBarContainer />
+            <SidebarNavigationContainer />
+            <SidebarContentContainer isSharedNotesPinned={isSharedNotesPinned} />
+            <NavBarContainer main="new" />
+            <WebcamContainer />
+            <ExternalVideoPlayerContainer />
+            <GenericContentMainAreaContainer
+              genericMainContentId={genericMainContentId}
+            />
+            {
+              shouldShowPresentation
+                ? (
+                  <PresentationContainer
+                    setPresentationFitToWidth={this.setPresentationFitToWidth}
+                    fitToWidth={presentationFitToWidth}
+                    darkTheme={darkTheme}
+                    presentationIsOpen={presentationIsOpen}
+                  />
+                )
+                : null
+            }
+            <ScreenshareContainer shouldShowScreenshare={shouldShowScreenshare} />
+            {isSharedNotesPinned
+              ? (
+                <NotesContainer
+                  area="media"
+                />
+              ) : null}
+            <AudioCaptionsSpeechContainer />
+            {this.renderAudioCaptions()}
+            {!hideNotificationToasts && <PresentationUploaderToastContainer intl={intl} />}
+            <UploaderContainer />
+            <BreakoutJoinConfirmationContainerGraphQL />
+            <BBBLiveKitRoomContainer />
+            <AudioContainer {...{
+              isAudioModalOpen,
+              setAudioModalIsOpen: this.setAudioModalIsOpen,
+              isVideoPreviewModalOpen,
+              setVideoPreviewModalIsOpen: this.setVideoPreviewModalIsOpen,
+            }}
+            />
+            {!hideNotificationToasts && <ToastContainer rtl />}
+            <ChatAlertContainerGraphql />
+            <RaiseHandNotifier />
+            <ManyWebcamsNotifier />
+            <PollingContainer />
+            <WakeLockContainer />
+            {this.renderActionsBar()}
+            <EmojiRainContainer />
+            <VoiceActivityAdapter />
+          </Styled.Layout>
+        </>
+      );
+    }
+    // only load presentation for presentationOnly
     return (
       <>
-        <Notifications />
-        <LayoutEngine layoutType={layoutType} />
+        <ScreenReaderAlertAdapter />
+        <PluginsEngineManager pluginConfig={pluginConfig} />
+        <LayoutEngine />
+        <LayoutObserver />
         <GlobalStyles />
         <Styled.Layout
           id="layout"
@@ -455,42 +399,76 @@ class App extends Component {
             height: '100%',
           }}
         >
-          {this.renderActivityCheck()}
-          {this.renderUserInformation()}
+          <ScreenReaderAlertContainer />
+          <PresentationContainer
+            setPresentationFitToWidth={this.setPresentationFitToWidth}
+            fitToWidth={presentationFitToWidth}
+            darkTheme={darkTheme}
+            presentationIsOpen={presentationIsOpen}
+            selectedLayout={selectedLayout}
+          />
           <BannerBarContainer />
           <NotificationsBarContainer />
           <SidebarNavigationContainer />
-          <SidebarContentContainer />
+          <SidebarContentContainer isSharedNotesPinned={isSharedNotesPinned} />
           <NavBarContainer main="new" />
-          {this.renderWebcamsContainer()}
-          {shouldShowPresentation ? <PresentationAreaContainer /> : null}
-          {shouldShowScreenshare ? <ScreenshareContainer /> : null}
+          <WebcamContainer />
           {
-            shouldShowExternalVideo
-              ? <ExternalVideoContainer isPresenter={isPresenter} />
-              : null
+            !isNonMediaLayout
+              && <ExternalVideoPlayerContainer />
           }
-          {this.renderCaptions()}
-          <UploaderContainer />
-          <CaptionsSpeechContainer />
-          <BreakoutRoomInvitation />
-          <AudioContainer />
-          <ToastContainer rtl />
-          {(audioAlertEnabled || pushAlertEnabled)
-            && (
-              <ChatAlertContainer
-                audioAlertEnabled={audioAlertEnabled}
-                pushAlertEnabled={pushAlertEnabled}
+          <GenericContentMainAreaContainer
+            genericMainContentId={genericMainContentId}
+          />
+          {
+          shouldShowPresentation
+            ? (
+              <PresentationContainer
+                setPresentationFitToWidth={this.setPresentationFitToWidth}
+                fitToWidth={presentationFitToWidth}
+                darkTheme={darkTheme}
+                presentationIsOpen={presentationIsOpen}
               />
-            )}
-          <StatusNotifier status="raiseHand" />
+            )
+            : null
+            }
+          {
+            !isNonMediaLayout
+            && <ScreenshareContainer shouldShowScreenshare={shouldShowScreenshare} />
+          }
+
+          {isSharedNotesPinned
+            ? (
+              <NotesContainer
+                area="media"
+              />
+            ) : null}
+          <AudioCaptionsSpeechContainer />
+          {this.renderAudioCaptions()}
+          { (
+            !hideNotificationToasts
+            && isNotificationEnabled) && <PresentationUploaderToastContainer intl={intl} /> }
+          <UploaderContainer />
+          <BreakoutJoinConfirmationContainerGraphQL />
+          <BBBLiveKitRoomContainer />
+          <AudioContainer {...{
+            isAudioModalOpen,
+            setAudioModalIsOpen: this.setAudioModalIsOpen,
+            isVideoPreviewModalOpen,
+            setVideoPreviewModalIsOpen: this.setVideoPreviewModalIsOpen,
+          }}
+          />
+          { (
+            !hideNotificationToasts
+            && isNotificationEnabled) && <ToastContainer rtl /> }
+          <ChatAlertContainerGraphql />
+          <RaiseHandNotifier />
           <ManyWebcamsNotifier />
           <PollingContainer />
-          <ModalContainer />
-          <PadsSessionsContainer />
+          <WakeLockContainer />
           {this.renderActionsBar()}
-          {customStyleUrl ? <link rel="stylesheet" type="text/css" href={customStyleUrl} /> : null}
-          {customStyle ? <link rel="stylesheet" type="text/css" href={`data:text/css;charset=UTF-8,${encodeURIComponent(customStyle)}`} /> : null}
+          <EmojiRainContainer />
+          <VoiceActivityAdapter />
         </Styled.Layout>
       </>
     );
@@ -498,6 +476,5 @@ class App extends Component {
 }
 
 App.propTypes = propTypes;
-App.defaultProps = defaultProps;
 
 export default injectIntl(App);

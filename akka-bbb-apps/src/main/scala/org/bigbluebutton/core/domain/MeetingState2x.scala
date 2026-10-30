@@ -1,8 +1,7 @@
 package org.bigbluebutton.core.domain
 
 import org.bigbluebutton.core.apps.BreakoutModel
-import org.bigbluebutton.core.models.GroupChats
-import org.bigbluebutton.core.models.PresentationPodManager
+import org.bigbluebutton.core.models.{ GroupChats, PresentationPodManager }
 
 object MeetingState2x {
 
@@ -42,4 +41,5 @@ object MeetingEndReason {
   val BREAKOUT_ENDED_BY_MOD = "BREAKOUT_ENDED_BY_MOD"
   val ENDED_DUE_TO_NO_AUTHED_USER = "ENDED_DUE_TO_NO_AUTHED_USER"
   val ENDED_DUE_TO_NO_MODERATOR = "ENDED_DUE_TO_NO_MODERATOR"
+  val ENDED_DUE_TO_SERVICE_INTERRUPTION = "ENDED_DUE_TO_SERVICE_INTERRUPTION"
 }

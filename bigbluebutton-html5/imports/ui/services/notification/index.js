@@ -1,8 +1,8 @@
 /* eslint react/jsx-filename-extension: 0 */
 import React from 'react';
-import _ from 'lodash';
 import { toast } from 'react-toastify';
-
+import { isEqual } from 'radash';
+import Styled from './styles';
 import Toast from '/imports/ui/components/common/toast/component';
 
 let lastToast = {
@@ -12,9 +12,16 @@ let lastToast = {
   icon: null,
 };
 
-export function notify(message, type = 'default', icon, options, content, small) {
+export function notify(
+  message,
+  type = 'default',
+  icon,
+  options,
+  content,
+  small,
+  showSeparator,
+) {
   const settings = {
-    type,
     ...options,
   };
 
@@ -25,17 +32,36 @@ export function notify(message, type = 'default', icon, options, content, small)
     icon,
     content,
     small,
+    showSeparator,
+    $disablePointer: options?.disablePointer ?? true,
   };
 
-  if (!toast.isActive(lastToast.id) || !_.isEqual(lastToastProps, toastProps)) {
+  if (!toast.isActive(lastToast.id) || !isEqual(lastToastProps, toastProps)) {
+    if (options?.helpLink != null && options?.helpLabel != null) {
+      const id = toast(
+        <div role="alert">
+          <Toast {...toastProps} />
+          <Styled.HelpLinkButton
+            label={options.helpLabel}
+            color="default"
+            size="sm"
+            onClick={() => { window.open(options.helpLink); }}
+            data-test="helpLinkToastButton"
+          />
+        </div>, settings,
+      );
+
+      lastToast = { id, ...toastProps };
+
+      return id;
+    }
     if (toast.isActive(lastToast.id)
-      && _.isEqual(lastToastProps.key, toastProps.key) && options?.autoClose > 0) {
+      && isEqual(lastToastProps.key, toastProps.key) && options?.autoClose > 0) {
       toast.update(
         lastToast.id,
         {
           render: <div role="alert"><Toast {...toastProps} /></div>,
           autoClose: options.autoClose,
-          ...toastProps,
         },
       );
     } else {

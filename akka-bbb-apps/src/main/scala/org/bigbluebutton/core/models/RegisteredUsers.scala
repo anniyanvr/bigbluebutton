@@ -1,33 +1,58 @@
 package org.bigbluebutton.core.models
 
 import com.softwaremill.quicklens._
+import org.bigbluebutton.core.db.{UserDAO, UserLivekitDAO, UserSessionTokenDAO}
 import org.bigbluebutton.core.domain.BreakoutRoom2x
 
 object RegisteredUsers {
-  def create(userId: String, extId: String, name: String, roles: String,
-             token: String, avatar: String, guest: Boolean, authenticated: Boolean,
-             guestStatus: String, excludeFromDashboard: Boolean, loggedOut: Boolean): RegisteredUser = {
+  def create(meetingId: String, userId: String, extId: String, name: String, firstName: String, lastName: String, roles: String,
+             authToken: String, sessionToken: Vector[String], avatar: String, webcamBackground: String, color: String, bot: Boolean,
+             guest: Boolean, authenticated: Boolean, guestStatus: String, excludeFromDashboard: Boolean, enforceLayout: String, logoutUrl: String,
+             userMetadata: Map[String, String], loggedOut: Boolean,
+             livekitToken: Option[String] = None): RegisteredUser = {
     new RegisteredUser(
       userId,
       extId,
+      meetingId,
       name,
+      firstName,
+      lastName,
       roles,
-      token,
+      authToken,
+      sessionToken,
       avatar,
+      webcamBackground,
+      color,
+      bot,
       guest,
       authenticated,
       guestStatus,
       excludeFromDashboard,
       System.currentTimeMillis(),
-      0,
-      false,
-      false,
+      lastAuthTokenValidatedOn = 0,
+      graphqlConnected = false,
+      graphqlDisconnectedOn = 0,
+      joined = false,
+      ejected = false,
+      banned = false,
+      enforceLayout,
+      logoutUrl,
+      userMetadata,
       loggedOut,
+      livekitToken = livekitToken
     )
   }
 
   def findWithToken(token: String, users: RegisteredUsers): Option[RegisteredUser] = {
     users.toVector.find(u => u.authToken == token)
+  }
+
+  def findWithSessionToken(sessionToken: String, users: RegisteredUsers): Option[RegisteredUser] = {
+    users.toVector.find(u => u.sessionToken.contains(sessionToken))
+  }
+
+  def findAll(users: RegisteredUsers): Vector[RegisteredUser] = {
+    users.toVector
   }
 
   def findWithUserId(id: String, users: RegisteredUsers): Option[RegisteredUser] = {
@@ -46,7 +71,7 @@ object RegisteredUsers {
     //userId + "-" + roomSequence
     val userIdParts = breakoutRoomId.split("-")
     val userExtId = userIdParts(0)
-    users.toVector.filter(ru => userExtId == ru.externId)
+    users.toVector.filter(ru => userExtId == ru.id)
   }
 
   def getRegisteredUserWithToken(token: String, userId: String, regUsers: RegisteredUsers): Option[RegisteredUser] = {
@@ -64,7 +89,19 @@ object RegisteredUsers {
     } yield user
   }
 
-  def add(users: RegisteredUsers, user: RegisteredUser): Vector[RegisteredUser] = {
+  def checkUserExtIdHasJoined(externId: String, regUsers: RegisteredUsers): Boolean = {
+    regUsers.toVector.filter(_.externId == externId).filter(_.joined).length > 0
+  }
+
+  def numUniqueJoinedUsers(regUsers: RegisteredUsers): Int = {
+    regUsers.toVector.filter(_.joined).map(_.externId).distinct.length
+  }
+
+  def numRegisteredUsers(regUsers: RegisteredUsers): Int = {
+    regUsers.toVector.size
+  }
+
+  def add(users: RegisteredUsers, user: RegisteredUser, meetingId: String): Vector[RegisteredUser] = {
 
     findWithExternUserId(user.externId, users) match {
       case Some(u) =>
@@ -73,18 +110,20 @@ object RegisteredUsers {
           // will fail and can't join.
           // ralam april 21, 2020
           val bannedUser = user.copy(banned = true)
+          UserDAO.insert(meetingId, bannedUser)
           users.save(bannedUser)
         } else {
           // If user hasn't been ejected, we allow user to join
           // as the user might be joining using 2 browsers for
           // better management of meeting.
           // ralam april 21, 2020
+          UserDAO.insert(meetingId, user)
           users.save(user)
         }
       case None =>
+        UserDAO.insert(meetingId, user)
         users.save(user)
     }
-
   }
 
   private def banOrEjectUser(ejectedUser: RegisteredUser, users: RegisteredUsers, ban: Boolean): RegisteredUser = {
@@ -100,13 +139,16 @@ object RegisteredUsers {
       users.save(u)
       u
     } else {
-      users.delete(ejectedUser.id)
-      ejectedUser
+      val u = ejectedUser.modify(_.ejected).setTo(true)
+      users.save(u)
+
+      updateUserJoin(users, u, joined = false)
     }
   }
-  def eject(id: String, users: RegisteredUsers, ban: Boolean): Option[RegisteredUser] = {
+
+  def eject(userId: String, users: RegisteredUsers, ban: Boolean): Option[RegisteredUser] = {
     for {
-      ru <- findWithUserId(id, users)
+      ru <- findWithUserId(userId, users)
     } yield {
       banOrEjectUser(ru, users, ban)
     }
@@ -116,6 +158,7 @@ object RegisteredUsers {
                             guestStatus: String): RegisteredUser = {
     val u = user.modify(_.guestStatus).setTo(guestStatus)
     users.save(u)
+    UserDAO.update(u)
     u
   }
 
@@ -130,11 +173,12 @@ object RegisteredUsers {
                                  lastBreakoutRoom: BreakoutRoom2x): RegisteredUser = {
     val u = user.modify(_.lastBreakoutRoom).setTo(lastBreakoutRoom)
     users.save(u)
+//    UserBreakoutRoomDAO.updateLastBreakoutRoom(u.id, lastBreakoutRoom)
     u
   }
 
-  def updateUserJoin(users: RegisteredUsers, user: RegisteredUser): RegisteredUser = {
-    val u = user.copy(joined = true)
+  def updateUserJoin(users: RegisteredUsers, user: RegisteredUser, joined: Boolean): RegisteredUser = {
+    val u = user.copy(joined = joined)
     users.save(u)
     u
   }
@@ -145,12 +189,51 @@ object RegisteredUsers {
     u
   }
 
-  def setUserLoggedOutFlag(users: RegisteredUsers, user: RegisteredUser): RegisteredUser = {
-    val u = user.copy(loggedOut = true)
+  def updateUserConnectedToGraphql(users: RegisteredUsers, user: RegisteredUser, graphqlConnected: Boolean): RegisteredUser = {
+    val u = user.copy(
+      graphqlConnected = graphqlConnected,
+      graphqlDisconnectedOn = {
+        if(graphqlConnected) {
+          0
+        } else if(!graphqlConnected && user.graphqlDisconnectedOn == 0) {
+          System.currentTimeMillis()
+        } else {
+          user.graphqlDisconnectedOn
+        }
+      }
+    )
     users.save(u)
     u
   }
 
+  def setUserLoggedOutFlag(users: RegisteredUsers, user: RegisteredUser): RegisteredUser = {
+    val u = user.copy(loggedOut = true)
+    users.save(u)
+    UserDAO.update(u)
+    u
+  }
+
+  def addUserSessionToken(users: RegisteredUsers, user: RegisteredUser, newSessionToken: String, newSessionName: String,
+                          enforceLayout: String): RegisteredUser = {
+    val u = user.copy(sessionToken = user.sessionToken :+ newSessionToken)
+    users.save(u)
+    UserSessionTokenDAO.insert(u.meetingId, u.id, newSessionToken, newSessionName, enforceLayout)
+    u
+  }
+
+  def removeUserSessionToken(users: RegisteredUsers, user: RegisteredUser, replaceSessionToken: String): RegisteredUser = {
+    val u = user.copy(sessionToken = user.sessionToken.filterNot(_ == replaceSessionToken))
+    users.save(u)
+    UserSessionTokenDAO.softDelete(u.meetingId, u.id, replaceSessionToken)
+    u
+  }
+
+  def setLivekitToken(users: RegisteredUsers, user: RegisteredUser, token: String): RegisteredUser = {
+    val u = user.copy(livekitToken = Some(token))
+    users.save(u)
+    UserLivekitDAO.insert(u.meetingId, u.id, token)
+    u
+  }
 }
 
 class RegisteredUsers {
@@ -163,6 +246,7 @@ class RegisteredUsers {
     regUsers.values.toVector
   }
 
+  /*
   private def delete(id: String): Option[RegisteredUser] = {
     val ru = regUsers.values.find(p => p.id == id)
     ru foreach { u =>
@@ -170,24 +254,39 @@ class RegisteredUsers {
     }
     ru
   }
+   */
 }
 
 case class RegisteredUser(
     id:                       String,
     externId:                 String,
+    meetingId:                String,
     name:                     String,
+    firstName:                String,
+    lastName:                 String,
     role:                     String,
     authToken:                String,
+    sessionToken:             Vector[String],
     avatarURL:                String,
+    webcamBackgroundURL:      String,
+    color:                    String,
+    bot:                      Boolean,
     guest:                    Boolean,
     authed:                   Boolean,
     guestStatus:              String,
     excludeFromDashboard:     Boolean,
     registeredOn:             Long,
     lastAuthTokenValidatedOn: Long,
+    graphqlConnected:         Boolean,
+    graphqlDisconnectedOn:    Long,
     joined:                   Boolean,
+    ejected:                  Boolean,
     banned:                   Boolean,
+    enforceLayout:            String,
+    logoutUrl:                String,
+    userMetadata:         Map[String,String],
     loggedOut:                Boolean,
-    lastBreakoutRoom:         BreakoutRoom2x = null
+    lastBreakoutRoom:         BreakoutRoom2x = null,
+    livekitToken:             Option[String] = None,
 )
 

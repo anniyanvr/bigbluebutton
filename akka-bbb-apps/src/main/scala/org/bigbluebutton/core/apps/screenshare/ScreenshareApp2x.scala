@@ -1,9 +1,9 @@
 package org.bigbluebutton.core.apps.screenshare
 
-import akka.actor.ActorContext
-import akka.event.Logging
+import org.apache.pekko.actor.ActorContext
+import org.apache.pekko.event.Logging
 import org.bigbluebutton.core.apps.ScreenshareModel
-import org.bigbluebutton.core.running.{ LiveMeeting, OutMsgRouter }
+import org.bigbluebutton.core.running.{LiveMeeting, OutMsgRouter}
 import org.bigbluebutton.core2.message.senders.MsgBuilder
 
 
@@ -41,8 +41,7 @@ object ScreenshareApp2x {
 class ScreenshareApp2x(implicit val context: ActorContext)
   extends GetScreenshareStatusReqMsgHdlr
   with ScreenshareRtmpBroadcastStartedVoiceConfEvtMsgHdlr
-  with ScreenshareRtmpBroadcastStoppedVoiceConfEvtMsgHdlr
-  with SyncGetScreenshareInfoRespMsgHdlr {
+  with ScreenshareRtmpBroadcastStoppedVoiceConfEvtMsgHdlr {
 
   val log = Logging(context.system, getClass)
 

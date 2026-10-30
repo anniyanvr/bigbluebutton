@@ -2,12 +2,18 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import { defineMessages, injectIntl } from 'react-intl';
 import Styled from './styles';
+import Session from '/imports/ui/services/storage/in-memory';
+import { ACTIONS, PANELS } from '/imports/ui/components/layout/enums';
+import {
+  layoutSelectInput,
+} from '/imports/ui/components/layout/context';
+import { useStorageKey } from '/imports/ui/services/storage/hooks';
 
 const propTypes = {
   intl: PropTypes.shape({
     formatMessage: PropTypes.func.isRequired,
   }).isRequired,
-  toggleSwapLayout: PropTypes.func.isRequired,
+  setPresentationIsOpen: PropTypes.func.isRequired,
 };
 
 const intlMessages = defineMessages({
@@ -31,12 +37,16 @@ const intlMessages = defineMessages({
 
 const PresentationOptionsContainer = ({
   intl,
-  isLayoutSwapped,
-  toggleSwapLayout,
+  presentationIsOpen,
+  setPresentationIsOpen,
   layoutContextDispatch,
   hasPresentation,
   hasExternalVideo,
   hasScreenshare,
+  hasPinnedSharedNotes,
+  hasGenericContent,
+  hasCameraAsContent,
+  isDarkThemeEnabled,
 }) => {
   let buttonType = 'presentation';
   if (hasExternalVideo) {
@@ -44,26 +54,61 @@ const PresentationOptionsContainer = ({
     buttonType = 'external-video';
   } else if (hasScreenshare) {
     buttonType = 'desktop';
+  } else if (hasCameraAsContent) {
+    buttonType = 'video';
   }
 
-  const isThereCurrentPresentation = hasExternalVideo || hasScreenshare || hasPresentation;
+  const isThereCurrentPresentation = hasExternalVideo || hasScreenshare
+    || hasPresentation || hasPinnedSharedNotes
+    || hasGenericContent || hasCameraAsContent;
+  const onlyPresentation = hasPresentation
+    && !hasExternalVideo && !hasScreenshare
+    && !hasPinnedSharedNotes && !hasGenericContent
+    && !hasCameraAsContent;
+  const sidebarContent = layoutSelectInput((i) => i.sidebarContent);
+  const isChatOpen = sidebarContent.sidebarContentPanel === PANELS.CHAT;
+  const PUBLIC_GROUP_CHAT_ID = window.meetingClientSettings.public.chat.public_group_id;
+  const isGridLayout = useStorageKey('isGridEnabled');
   return (
-    <Styled.RestorePresentationButton
-      icon={`${buttonType}${isLayoutSwapped ? '_off' : ''}`}
-      data-test="restorePresentationButton"
-      label={intl.formatMessage(isLayoutSwapped ? intlMessages.restorePresentationLabel : intlMessages.minimizePresentationLabel)}
-      aria-label={intl.formatMessage(isLayoutSwapped ? intlMessages.restorePresentationLabel : intlMessages.minimizePresentationLabel)}
-      aria-describedby={intl.formatMessage(isLayoutSwapped ? intlMessages.restorePresentationDesc : intlMessages.minimizePresentationDesc)}
-      description={intl.formatMessage(isLayoutSwapped ? intlMessages.restorePresentationDesc : intlMessages.minimizePresentationDesc)}
-      color={!isLayoutSwapped ? "primary" : "default"}
+    <Styled.PresentationButton
+      icon={`${buttonType}${!presentationIsOpen ? '_off' : ''}`}
+      label={intl.formatMessage(!presentationIsOpen ? intlMessages.restorePresentationLabel
+        : intlMessages.minimizePresentationLabel)}
+      aria-label={intl.formatMessage(!presentationIsOpen ? intlMessages.restorePresentationLabel
+        : intlMessages.minimizePresentationLabel)}
+      aria-describedby={intl.formatMessage(!presentationIsOpen
+        ? intlMessages.restorePresentationDesc
+        : intlMessages.minimizePresentationDesc)}
+      description={intl.formatMessage(!presentationIsOpen ? intlMessages.restorePresentationDesc
+        : intlMessages.minimizePresentationDesc)}
       hideLabel
       circle
       size="lg"
-      onClick={() => toggleSwapLayout(layoutContextDispatch)}
+      onClick={(e) => {
+        e.currentTarget.blur();
+        if (!isChatOpen && isGridLayout && !presentationIsOpen) {
+          layoutContextDispatch({
+            type: ACTIONS.SET_SIDEBAR_CONTENT_PANEL,
+            value: PANELS.CHAT,
+          });
+          layoutContextDispatch({
+            type: ACTIONS.SET_ID_CHAT_OPEN,
+            value: PUBLIC_GROUP_CHAT_ID,
+          });
+          layoutContextDispatch({
+            type: ACTIONS.SET_SIDEBAR_CONTENT_IS_OPEN,
+            value: true,
+          });
+        }
+        setPresentationIsOpen(layoutContextDispatch, !presentationIsOpen);
+        if (onlyPresentation) {
+          Session.setItem('presentationLastState', !presentationIsOpen);
+        }
+      }}
       id="restore-presentation"
-      ghost={isLayoutSwapped}
       disabled={!isThereCurrentPresentation}
-      data-test={isLayoutSwapped ? 'restorePresentation' : 'minimizePresentation'}
+      data-test={!presentationIsOpen ? 'restorePresentation' : 'minimizePresentation'}
+      isDarkThemeEnabled={isDarkThemeEnabled}
     />
   );
 };

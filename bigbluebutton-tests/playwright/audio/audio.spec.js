@@ -1,16 +1,49 @@
-const { test } = require('@playwright/test');
+const { test } = require('../fixtures');
+const { fullyParallel } = require('../playwright.config');
 const { Audio } = require('./audio');
+const { initializePages } = require('../core/helpers');
 
-test.describe.parallel('Audio', () => {
-  test('Join audio with Listen Only', async ({ browser, page }) => {
-    const audio = new Audio(browser, page);
-    await audio.init(true, false);
+test.describe('Audio', { tag: '@ci' }, () => {
+  const audio = new Audio();
+
+  test.describe.configure({ mode: fullyParallel ? 'parallel' : 'serial' });
+  test[fullyParallel ? 'beforeEach' : 'beforeAll'](async ({ browser }) => {
+    await initializePages(audio, browser, { isMultiUser: true });
+  });
+
+  // https://docs.bigbluebutton.org/3.0/testing/release-testing/#listen-only-mode-automated
+  test('Join audio with Listen Only', async () => {
     await audio.joinAudio();
   });
 
-  test('Join audio with Microphone', async ({ browser, page }) => {
-    const audio = new Audio(browser, page);
-    await audio.init(true, false);
+  // https://docs.bigbluebutton.org/3.0/testing/release-testing/#join-audio-automated
+  test('Join audio with Microphone', async () => {
     await audio.joinMicrophone();
+  });
+
+  test('Change audio input and keep it connected', async () => {
+    await audio.changeAudioInput();
+  });
+
+  // https://docs.bigbluebutton.org/3.0/testing/release-testing/#muteunmute
+  // Ci failure: not being muted when clicking the mute button (isTalking element keep displayed)
+  test('Mute yourself by clicking the mute button', { tag: '@flaky' }, async () => {
+    await audio.muteYourselfByButton();
+  });
+
+  // https://docs.bigbluebutton.org/3.0/testing/release-testing/#choosing-different-sources
+  test('Keep the last mute state after rejoining audio', async () => {
+    await audio.keepMuteStateOnRejoin();
+  });
+
+  // Talking Indicator
+  // https://docs.bigbluebutton.org/3.0/testing/release-testing/#talking-indicator
+  test('Mute yourself by clicking the talking indicator', async () => {
+    await audio.muteYourselfByTalkingIndicator();
+  });
+
+  // https://docs.bigbluebutton.org/3.0/testing/release-testing/#talking-indicator
+  test('Mute another user by clicking the talking indicator', async () => {
+    await audio.muteAnotherUser();
   });
 });

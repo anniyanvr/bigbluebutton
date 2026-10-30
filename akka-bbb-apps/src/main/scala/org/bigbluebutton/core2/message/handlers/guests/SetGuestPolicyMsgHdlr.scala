@@ -1,11 +1,10 @@
 package org.bigbluebutton.core2.message.handlers.guests
 
 import org.bigbluebutton.common2.msgs.SetGuestPolicyCmdMsg
-import org.bigbluebutton.core.models.{ GuestPolicy, GuestPolicyType, GuestsWaiting }
-import org.bigbluebutton.core.running.{ LiveMeeting, OutMsgRouter }
-import org.bigbluebutton.core2.message.senders.MsgBuilder
 import org.bigbluebutton.core.apps.{ PermissionCheck, RightsManagementTrait }
-import org.bigbluebutton.core.running.MeetingActor
+import org.bigbluebutton.core.models.{ GuestPolicy, GuestPolicyType, GuestsWaiting }
+import org.bigbluebutton.core.running.{ LiveMeeting, MeetingActor, OutMsgRouter }
+import org.bigbluebutton.core2.message.senders.MsgBuilder
 
 trait SetGuestPolicyMsgHdlr extends RightsManagementTrait {
   this: MeetingActor =>
@@ -22,7 +21,11 @@ trait SetGuestPolicyMsgHdlr extends RightsManagementTrait {
       val newPolicy = msg.body.policy.toUpperCase()
       if (GuestPolicyType.policyTypes.contains(newPolicy)) {
         val policy = GuestPolicy(newPolicy, msg.body.setBy)
-        GuestsWaiting.setGuestPolicy(liveMeeting.guestsWaiting, policy)
+        GuestsWaiting.setGuestPolicy(
+          liveMeeting.props.meetingProp.intId,
+          liveMeeting.guestsWaiting,
+          policy
+        )
         val event = MsgBuilder.buildGuestPolicyChangedEvtMsg(
           liveMeeting.props.meetingProp.intId, msg.header.userId, newPolicy, msg.body.setBy
         )

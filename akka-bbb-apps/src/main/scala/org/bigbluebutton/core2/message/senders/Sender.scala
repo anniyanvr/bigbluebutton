@@ -4,10 +4,24 @@ import org.bigbluebutton.core.running.OutMsgRouter
 
 object Sender {
 
-  def sendDisconnectClientSysMsg(meetingId: String, userId: String,
-                                 ejectedBy: String, reason: String, outGW: OutMsgRouter): Unit = {
-    val ejectFromMeetingSystemEvent = MsgBuilder.buildDisconnectClientSysMsg(meetingId, userId, ejectedBy, reason)
-    outGW.send(ejectFromMeetingSystemEvent)
+  def sendForceUserGraphqlReconnectionSysMsg(meetingId: String, userId: String, sessionTokens: Vector[String], reason: String, outGW: OutMsgRouter): Unit = {
+    for {
+      sessionToken <- sessionTokens
+    } yield {
+      outGW.send(
+        MsgBuilder.buildForceUserGraphqlReconnectionSysMsg(meetingId, userId, sessionToken, reason)
+      )
+    }
+  }
+
+  def sendForceUserGraphqlDisconnectionSysMsg(meetingId: String, userId: String, sessionTokens: Vector[String], reason: String, reasonMsgId: String, outGW: OutMsgRouter): Unit = {
+    for {
+      sessionToken <- sessionTokens
+    } yield {
+      outGW.send(
+        MsgBuilder.buildForceUserGraphqlDisconnectionSysMsg(meetingId, userId, sessionToken, reason, reasonMsgId)
+      )
+    }
   }
 
   def sendUserInactivityInspectMsg(meetingId: String, userId: String, responseDelay: Long, outGW: OutMsgRouter): Unit = {

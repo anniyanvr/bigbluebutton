@@ -19,20 +19,23 @@
 
 package org.bigbluebutton.core.record.events
 
+import spray.json._
+
 class ParticipantJoinRecordEvent extends AbstractParticipantRecordEvent {
   import ParticipantJoinRecordEvent._
+  import ParticipantJoinRecordEventJsonProtocol._
 
   setEvent("ParticipantJoinEvent")
 
-  def setUserId(userId: String) {
+  def setUserId(userId: String): Unit = {
     eventMap.put(USER_ID, userId)
   }
 
-  def setExternalUserId(externalUserId: String) {
+  def setExternalUserId(externalUserId: String): Unit = {
     eventMap.put(EXT_USER_ID, externalUserId)
   }
 
-  def setName(name: String) {
+  def setName(name: String): Unit = {
     eventMap.put(NAME, name)
   }
 
@@ -40,8 +43,12 @@ class ParticipantJoinRecordEvent extends AbstractParticipantRecordEvent {
    * Sets the role of the user as MODERATOR or VIEWER
    * @param role
    */
-  def setRole(role: String) {
+  def setRole(role: String): Unit = {
     eventMap.put(ROLE, role)
+  }
+
+  def setUserdata(userMetadata: Map[String, String]): Unit = {
+    eventMap.put(USER_DATA, userMetadata.toJson.compactPrint)
   }
 }
 
@@ -50,4 +57,9 @@ object ParticipantJoinRecordEvent {
   protected final val EXT_USER_ID = "externalUserId"
   protected final val NAME = "name"
   protected final val ROLE = "role"
+  protected final val USER_DATA = "userdata"
+}
+
+object ParticipantJoinRecordEventJsonProtocol extends DefaultJsonProtocol {
+
 }

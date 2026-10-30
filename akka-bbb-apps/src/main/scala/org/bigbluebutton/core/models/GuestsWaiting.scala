@@ -1,5 +1,7 @@
 package org.bigbluebutton.core.models
 
+import org.bigbluebutton.core.db.MeetingUsersPoliciesDAO
+
 object GuestsWaiting {
   def findWithIntId(guests: GuestsWaiting, intId: String): Option[GuestWaiting] = {
     guests.toVector find (u => u.intId == intId)
@@ -20,8 +22,9 @@ object GuestsWaiting {
     guest.guestPolicy
   }
 
-  def setGuestPolicy(guests: GuestsWaiting, policy: GuestPolicy): Unit = {
+  def setGuestPolicy(meetingId: String, guests: GuestsWaiting, policy: GuestPolicy): Unit = {
     guests.setGuestPolicy(policy)
+    MeetingUsersPoliciesDAO.update(meetingId, policy)
   }
 
   def setGuestLobbyMessage(guests: GuestsWaiting, message: String): Unit = {
@@ -38,9 +41,9 @@ class GuestsWaiting {
 
   private var guestPolicy = GuestPolicy(GuestPolicyType.ALWAYS_ACCEPT, SystemUser.ID)
 
-  private var guestLobbyMessage = ""
+  var guestLobbyMessage = ""
 
-  private var guestsWithPrivateGuestLobbyMessages: collection.mutable.HashMap[String, String] = new collection.mutable.HashMap[String, String]
+  private val guestsWithPrivateGuestLobbyMessages: collection.mutable.HashMap[String, String] = new collection.mutable.HashMap[String, String]
 
   private def toVector: Vector[GuestWaiting] = guests.values.toVector
 
@@ -61,14 +64,16 @@ class GuestsWaiting {
   def getGuestPolicy(): GuestPolicy = guestPolicy
   def setGuestPolicy(policy: GuestPolicy) = guestPolicy = policy
 
-  def setGuestLobbyMessage(message: String) = guestLobbyMessage = message
+  def setGuestLobbyMessage(message: String) = {
+    guestLobbyMessage = message
+  }
 
   def setPrivateGuestLobbyMessage(intId: String, message: String): Unit = {
     guestsWithPrivateGuestLobbyMessages.put(intId, message);
   }
 }
 
-case class GuestWaiting(intId: String, name: String, role: String, guest: Boolean, avatar: String, authenticated: Boolean, registeredOn: Long)
+case class GuestWaiting(intId: String, name: String, role: String, guest: Boolean, avatar: String, webcamBackground: String, color: String, authenticated: Boolean, registeredOn: Long)
 case class GuestPolicy(policy: String, setBy: String)
 
 object GuestPolicyType {

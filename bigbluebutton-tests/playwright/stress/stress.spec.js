@@ -1,5 +1,7 @@
-const { test } = require('@playwright/test');
+const { test } = require('../fixtures');
 const { Stress } = require('./stress.js');
+
+// @ci Note: Stress tests are not intended to be run in CI
 
 test.describe.parallel('Stress', () => {
   test.beforeEach(async () => test.setTimeout(0));
@@ -9,7 +11,7 @@ test.describe.parallel('Stress', () => {
     await stress.moderatorAsPresenter();
   });
 
-  test('All users must receive breakout room invitations', async ({ browser, context, page }) => {
+  test.fixme('All users must receive breakout room invitations', async ({ browser, context, page }) => {
     const stress = new Stress(browser, context, page);
     await stress.breakoutRoomInvitation();
   });

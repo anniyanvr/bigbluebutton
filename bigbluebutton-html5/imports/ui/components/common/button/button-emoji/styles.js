@@ -9,13 +9,11 @@ import { btnSpacing } from '/imports/ui/stylesheets/styled-components/general';
 
 const EmojiButtonIcon = styled(Icon)`
   position: absolute;
-  top: 0;
-  height: 60%;
+  top: 1px !important;
+  height: 40%;
   left: 0;
   width: 75%;
-  margin-left: 15%;
-  font-size: 50%;
-  margin-top: 30%;
+  font-size: 100%;
   color: ${btnDefaultColor};
 `;
 
@@ -44,6 +42,12 @@ const EmojiButton = styled.button`
   overflow: hidden;
   z-index: 2;
   border: none;
+  padding: 0;
+
+  [dir="rtl"] & {
+    right: initial;
+    left: -.2em;
+  }
 
   &:hover {
     transform: scale(1.5);
@@ -70,6 +74,11 @@ const EmojiButtonSpace = styled.div`
   right: -.4em;
   bottom: -.2em;
   border-radius: 50%;
+
+  [dir="rtl"] & {
+    right: initial;
+    left: -.4em;
+  }
 `;
 
 export default {

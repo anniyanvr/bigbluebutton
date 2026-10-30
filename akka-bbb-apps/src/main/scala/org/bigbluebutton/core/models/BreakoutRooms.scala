@@ -1,8 +1,9 @@
 package org.bigbluebutton.core.models
 
-import org.bigbluebutton.common2.msgs.{ BreakoutRoomVO, BreakoutUserVO }
+import org.bigbluebutton.common2.msgs.BreakoutRoomVO
 
 object BreakoutRooms {
+  /*
   def breakoutRoomsStartedOn(status: BreakoutRooms) = status.breakoutRoomsStartedOn
   def breakoutRoomsStartedOn(status: BreakoutRooms, startedOn: Long) = status.breakoutRoomsStartedOn = startedOn
 
@@ -10,8 +11,8 @@ object BreakoutRooms {
   def breakoutRoomsdurationInMinutes(status: BreakoutRooms, duration: Int) = status.breakoutRoomsdurationInMinutes = duration
 
   def newBreakoutRoom(parentRoomId: String, id: String, externalMeetingId: String, name: String, sequence: Integer, freeJoin: Boolean,
-                      voiceConfId: String, assignedUsers: Vector[String], breakoutRooms: BreakoutRooms): Option[BreakoutRoomVO] = {
-    val brvo = new BreakoutRoomVO(id, externalMeetingId, name, parentRoomId, sequence, freeJoin, voiceConfId, assignedUsers, Vector())
+                      voiceConfId: String, assignedUsers: Vector[String], captureNotes: Boolean, captureSlides: Boolean, breakoutRooms: BreakoutRooms): Option[BreakoutRoomVO] = {
+    val brvo = new BreakoutRoomVO(id, externalMeetingId, name, parentRoomId, sequence, freeJoin, voiceConfId, assignedUsers, Vector(), captureNotes, captureSlides)
     breakoutRooms.add(brvo)
     Some(brvo)
   }
@@ -22,10 +23,6 @@ object BreakoutRooms {
 
   def getRoomWithExternalId(breakoutRooms: BreakoutRooms, externalId: String): Option[BreakoutRoomVO] = {
     breakoutRooms.rooms.values find (r => r.externalId == externalId)
-  }
-
-  def getRooms(breakoutRooms: BreakoutRooms): Array[BreakoutRoomVO] = {
-    breakoutRooms.rooms.values.toArray
   }
 
   def getNumberOfRooms(breakoutRooms: BreakoutRooms): Int = {
@@ -45,26 +42,31 @@ object BreakoutRooms {
       room2 = breakoutRooms.add(newroom)
     } yield room2
   }
+  */
 
-  def removeRoom(breakoutRooms: BreakoutRooms, id: String) {
+  def getRooms(breakoutRooms: BreakoutRooms): Array[BreakoutRoomVO] = {
+    breakoutRooms.rooms.values.toArray
+  }
+
+  def removeRoom(breakoutRooms: BreakoutRooms, id: String): Unit = {
     breakoutRooms.remove(id)
   }
 }
 
 class BreakoutRooms {
-  private var breakoutRoomsStartedOn: Long = 0
-  private var breakoutRoomsdurationInMinutes: Int = 0
+  //  private var breakoutRoomsStartedOn: Long = 0
+  //  private var breakoutRoomsdurationInMinutes: Int = 0
 
   private var rooms = new collection.immutable.HashMap[String, BreakoutRoomVO]
 
-  var pendingRoomsNumber: Integer = 0
+  //  var pendingRoomsNumber: Integer = 0
 
-  private def add(room: BreakoutRoomVO): BreakoutRoomVO = {
-    rooms += room.id -> room
-    room
-  }
+  //  private def add(room: BreakoutRoomVO): BreakoutRoomVO = {
+  //    rooms += room.id -> room
+  //    room
+  //  }
 
-  private def remove(id: String) {
+  private def remove(id: String): Unit = {
     rooms -= id
   }
 }

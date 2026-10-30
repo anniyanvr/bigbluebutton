@@ -1,8 +1,6 @@
 import browserInfo from '/imports/utils/browserInfo';
 import deviceInfo from '/imports/utils/deviceInfo';
-
-const FORCE_RELAY_ON_FF = Meteor.settings.public.kurento.forceRelayOnFirefox;
-const FORCE_RELAY = Meteor.settings.public.media.forceRelay;
+import { hasTurnServer } from '/imports/utils/fetchStunTurnServers';
 
 /*
  * Whether TURN/relay usage should be forced to work around Firefox's lack of
@@ -16,7 +14,10 @@ const shouldForceRelay = () => {
   const { isFirefox } = browserInfo;
   const { isIos } = deviceInfo;
 
-  return FORCE_RELAY || ((isFirefox && !isIos) && FORCE_RELAY_ON_FF);
+  const FORCE_RELAY_ON_FF = window.meetingClientSettings.public.media.forceRelayOnFirefox;
+  const FORCE_RELAY = window.meetingClientSettings.public.media.forceRelay;
+
+  return FORCE_RELAY || ((isFirefox && !isIos) && FORCE_RELAY_ON_FF && hasTurnServer());
 };
 
 export {

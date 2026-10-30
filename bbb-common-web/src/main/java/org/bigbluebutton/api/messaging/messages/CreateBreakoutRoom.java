@@ -1,5 +1,7 @@
 package org.bigbluebutton.api.messaging.messages;
 
+import java.util.Map;
+
 public class CreateBreakoutRoom implements IMessage {
 
     public final String meetingId;
@@ -19,6 +21,14 @@ public class CreateBreakoutRoom implements IMessage {
     public final Integer sourcePresentationSlide;
     public final Boolean record;
     public final Boolean privateChatEnabled;
+    public final Boolean captureNotes; // Upload shared notes to main room after breakout room end
+    public final Boolean captureSlides; // Upload annotated breakout slides to main room after breakout room end
+    public final String captureNotesFilename;
+    public final String captureSlidesFilename;
+    public final Map<String, Object> pluginProp;
+    public final String audioBridge;
+    public final String cameraBridge;
+    public final String screenShareBridge;
 
     public CreateBreakoutRoom(String meetingId,
 															String parentMeetingId,
@@ -35,7 +45,15 @@ public class CreateBreakoutRoom implements IMessage {
 															String sourcePresentationId,
 															Integer sourcePresentationSlide,
 															Boolean record,
-															Boolean privateChatEnabled) {
+															Boolean privateChatEnabled,
+                                                            Boolean captureNotes,
+                                                            Boolean captureSlides,
+                                                            String captureNotesFilename,
+                                                            String captureSlidesFilename,
+                                                            Map<String, Object> pluginProp,
+                                                            String audioBridge,
+                                                            String cameraBridge,
+                                                            String screenShareBridge) {
         this.meetingId = meetingId;
         this.parentMeetingId = parentMeetingId;
         this.name = name;
@@ -52,5 +70,13 @@ public class CreateBreakoutRoom implements IMessage {
         this.sourcePresentationSlide = sourcePresentationSlide;
         this.record = record;
         this.privateChatEnabled = privateChatEnabled;
+        this.captureNotes = captureNotes;
+        this.captureSlides = captureSlides;
+        this.captureNotesFilename = captureNotesFilename;
+        this.captureSlidesFilename = captureSlidesFilename;
+        this.pluginProp = pluginProp;
+        this.audioBridge = audioBridge;
+        this.cameraBridge = cameraBridge;
+        this.screenShareBridge = screenShareBridge;
     }
 }

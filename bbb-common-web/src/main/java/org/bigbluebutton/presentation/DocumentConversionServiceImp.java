@@ -19,31 +19,61 @@
 
 package org.bigbluebutton.presentation;
 
+import java.io.File;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import org.bigbluebutton.api2.IBbbWebApiGWApp;
 import org.bigbluebutton.presentation.imp.*;
 import org.bigbluebutton.presentation.messages.DocConversionRequestReceived;
+import org.bigbluebutton.presentation.messages.DocInvalidMimeType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.google.gson.Gson;
+import xyz.capybara.clamav.ClamavClient;
+import xyz.capybara.clamav.commands.scan.result.ScanResult;
+
+import static org.bigbluebutton.presentation.Util.deleteDirectoryFromFileHandlingErrors;
 
 public class DocumentConversionServiceImp implements DocumentConversionService {
+  private static final String CLAMAV_HOST = "localhost";
+  private static final Integer CLAMAV_PORT = 3310;
+
   private static Logger log = LoggerFactory.getLogger(DocumentConversionServiceImp.class);
 
   private IBbbWebApiGWApp gw;
   private OfficeToPdfConversionService officeToPdfConversionService;
-  private SwfSlidesGenerationProgressNotifier notifier;
+  private SlidesGenerationProgressNotifier notifier;
 
   private PresentationFileProcessor presentationFileProcessor;
 
-  public void processDocument(UploadedPresentation pres) {
+  public void processDocument(UploadedPresentation pres, boolean scanUploadedPresentationFiles) {
     if (pres.isUploadFailed()) {
       // We should send a message to the client in the future.
       // ralam may 1, 2020
       log.error("Presentation upload failed for meetingId={} presId={}", pres.getMeetingId(), pres.getId());
       log.error("Presentation upload fail reasons {}", pres.getUploadFailReason());
       return;
+    }
+
+    if (scanUploadedPresentationFiles) {
+      try {
+        ClamavClient client = new ClamavClient(CLAMAV_HOST, CLAMAV_PORT);
+        ScanResult result = client.scan(Path.of(pres.getUploadedFile().getAbsolutePath()));
+
+        if (result instanceof ScanResult.VirusFound) {
+          log.error("Presentation upload failed for meetingId={} presId={}", pres.getMeetingId(), pres.getId());
+          log.error("Presentation upload failed because a virus was detected in the uploaded file");
+          notifier.sendUploadFileVirus(pres);
+          Util.deleteDirectoryFromFileHandlingErrors(pres.getUploadedFile());
+          return;
+        }
+      } catch (Exception e) {
+        log.error("Failed to scan uploaded file for meetingId={} presID={}: {}", pres.getMeetingId(), pres.getId(), e.getMessage());
+        notifier.sendUploadFileScanFailed(pres);
+        Util.deleteDirectoryFromFileHandlingErrors(pres.getUploadedFile());
+        return;
+      }
     }
 
     sendDocConversionRequestReceived(pres);
@@ -69,7 +99,7 @@ public class DocumentConversionServiceImp implements DocumentConversionService {
           // Send notification that office to pdf conversion failed.
           // The cause should have been set by the previous step.
           // (ralam feb 15, 2020)
-          ocsf.sendProgress(pres);
+          ocsf.sendOfficeToPdfConversionFailed(pres);
         }
       } else if (SupportedFileTypes.isPdfFile(fileType)) {
         presentationFileProcessor.process(pres);
@@ -93,6 +123,9 @@ public class DocumentConversionServiceImp implements DocumentConversionService {
       }
 
     } else {
+      File presentationFile = pres.getUploadedFile();
+      deleteDirectoryFromFileHandlingErrors(presentationFile);
+
       Map<String, Object> logData = new HashMap<String, Object>();
       logData = new HashMap<String, Object>();
       logData.put("podId", pres.getPodId());
@@ -124,6 +157,11 @@ public class DocumentConversionServiceImp implements DocumentConversionService {
     }
   }
 
+  public void sendDocConversionFailedOnMimeType(UploadedPresentation pres, String fileMime,
+                                                String fileExtension) {
+    notifier.sendInvalidMimeTypeMessage(pres, fileMime, fileExtension);
+  }
+
   private void sendDocConversionRequestReceived(UploadedPresentation pres) {
       if (! pres.isConversionStarted()) {
           Map<String, Object> logData = new HashMap<String, Object>();
@@ -153,7 +191,8 @@ public class DocumentConversionServiceImp implements DocumentConversionService {
                   pres.getAuthzToken(),
                   pres.isDownloadable(),
                   pres.isRemovable(),
-                  pres.isCurrent());
+                  pres.isCurrent()
+          );
           notifier.sendDocConversionProgress(progress);
       }
   }
@@ -166,7 +205,7 @@ public class DocumentConversionServiceImp implements DocumentConversionService {
     officeToPdfConversionService = s;
   }
 
-  public void setSwfSlidesGenerationProgressNotifier(SwfSlidesGenerationProgressNotifier notifier) {
+  public void setSlidesGenerationProgressNotifier(SlidesGenerationProgressNotifier notifier) {
       this.notifier = notifier;
   }
 

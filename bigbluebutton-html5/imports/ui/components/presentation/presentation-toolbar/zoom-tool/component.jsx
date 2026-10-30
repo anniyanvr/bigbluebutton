@@ -1,6 +1,9 @@
 import React, { PureComponent } from 'react';
 import PropTypes from 'prop-types';
 import { defineMessages, injectIntl } from 'react-intl';
+import {
+  HUNDRED_PERCENT
+} from '/imports/utils/slideCalcUtils';
 import Styled from './styles';
 import HoldButton from './holdButton/component';
 
@@ -55,7 +58,9 @@ class ZoomTool extends PureComponent {
     const { zoomValue } = this.props;
     const { stateZoomValue } = this.state;
     const isDifferent = zoomValue !== stateZoomValue;
-    if (isDifferent) this.onChanger(zoomValue);
+    if (isDifferent) {
+      this.onChanger(zoomValue);
+    }
   }
 
   onChanger(value) {
@@ -133,8 +138,8 @@ class ZoomTool extends PureComponent {
   }
 
   resetZoom() {
-    const { stateZoomValue, initialstateZoomValue } = this.state;
-    if (stateZoomValue !== initialstateZoomValue) this.onChanger(initialstateZoomValue);
+    const { stateZoomValue } = this.state;
+    if (stateZoomValue !== HUNDRED_PERCENT) this.onChanger(HUNDRED_PERCENT);
   }
 
   render() {
@@ -149,6 +154,7 @@ class ZoomTool extends PureComponent {
     const { stateZoomValue } = this.state;
 
     let zoomOutAriaLabel = intl.formatMessage(intlMessages.zoomOutLabel);
+
     if (zoomValue > minBound) {
       zoomOutAriaLabel += ` ${intl.formatNumber(((zoomValue - step) / 100), { style: 'percent' })}`;
     }
@@ -170,10 +176,14 @@ class ZoomTool extends PureComponent {
             minBound={minBound}
           >
             <Styled.DecreaseZoomButton
+              color="light"
+              circle
+              size="md"
               key="zoom-tool-1"
               aria-describedby="zoomOutDescription"
               aria-label={zoomOutAriaLabel}
               label={intl.formatMessage(intlMessages.zoomOutLabel)}
+              data-test="zoomOutBtn"
               icon="substract"
               onClick={() => { }}
               disabled={(zoomValue <= minBound) || !isMeteorConnected}
@@ -187,12 +197,13 @@ class ZoomTool extends PureComponent {
             <Styled.ResetZoomButton
               aria-label={intl.formatMessage(intlMessages.resetZoomLabel)}
               aria-describedby="resetZoomDescription"
-              disabled={(stateZoomValue === minBound) || !isMeteorConnected}
-              color="default"
+              disabled={(stateZoomValue === HUNDRED_PERCENT) || !isMeteorConnected}
+              color="light"
               customIcon={stateZoomPct}
               size="md"
               onClick={() => this.resetZoom()}
               label={intl.formatMessage(intlMessages.resetZoomLabel)}
+              data-test="resetZoomButton"
               hideLabel
             />
             <div id="resetZoomDescription" hidden>
@@ -208,6 +219,9 @@ class ZoomTool extends PureComponent {
             maxBound={maxBound}
           >
             <Styled.IncreaseZoomButton
+              color="light"
+              circle
+              size="md"
               key="zoom-tool-3"
               aria-describedby="zoomInDescription"
               aria-label={zoomInAriaLabel}
@@ -227,7 +241,10 @@ class ZoomTool extends PureComponent {
 }
 
 const propTypes = {
-  intl: PropTypes.object.isRequired,
+  intl: PropTypes.shape({
+    formatMessage: PropTypes.func.isRequired,
+    formatNumber: PropTypes.func.isRequired,
+  }).isRequired,
   zoomValue: PropTypes.number.isRequired,
   change: PropTypes.func.isRequired,
   minBound: PropTypes.number.isRequired,

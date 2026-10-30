@@ -1,25 +1,25 @@
 package org.bigbluebutton
 
-import akka.actor.ActorSystem
-import akka.event.Logging
-import akka.http.scaladsl.Http
-import akka.stream.ActorMaterializer
-import org.bigbluebutton.common2.redis.{ MessageSender, RedisConfig, RedisPublisher }
+import org.apache.pekko.actor.{ActorRef, ActorSystem}
+import org.apache.pekko.event.Logging
+import org.apache.pekko.http.scaladsl.Http
+import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse}
+import org.bigbluebutton.common2.bus.IncomingJsonMessageBus
+import org.bigbluebutton.common2.redis.{MessageSender, RedisConfig, RedisPublisher}
 import org.bigbluebutton.core._
 import org.bigbluebutton.core.bus._
 import org.bigbluebutton.core.pubsub.senders.ReceivedJsonMsgHandlerActor
-import org.bigbluebutton.core2.AnalyticsActor
-import org.bigbluebutton.core2.FromAkkaAppsMsgSenderActor
-import org.bigbluebutton.endpoint.redis.AppsRedisSubscriberActor
-import org.bigbluebutton.endpoint.redis.RedisRecorderActor
-import org.bigbluebutton.endpoint.redis.LearningDashboardActor
-import org.bigbluebutton.common2.bus.IncomingJsonMessageBus
-import org.bigbluebutton.service.{ HealthzService, MeetingInfoActor, MeetingInfoService }
+import org.bigbluebutton.core2.{AnalyticsActor, FromAkkaAppsMsgSenderActor}
+import org.bigbluebutton.endpoint.redis._
+import org.bigbluebutton.service.{HealthzService, MeetingInfoActor, MeetingInfoService, UserInfoService}
+import org.bigbluebutton.service.{MeetingServiceImpl, HealthzService, MeetingInfoActor, MeetingInfoService, UserInfoService}
+import org.bigbluebutton.protos._
+import scala.concurrent.{ExecutionContext, Future}
 
 object Boot extends App with SystemConfiguration {
 
   implicit val system = ActorSystem("bigbluebutton-apps-system")
-  implicit val materializer: ActorMaterializer = ActorMaterializer()
+//  implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val executor = system.dispatcher
 
   val logger = Logging(system, getClass)
@@ -52,11 +52,14 @@ object Boot extends App with SystemConfiguration {
 
   val meetingInfoService = MeetingInfoService(system, meetingInfoActorRef)
 
-  val apiService = new ApiService(healthzService, meetingInfoService)
-
   val redisRecorderActor = system.actorOf(
     RedisRecorderActor.props(system, redisConfig, healthzService),
     "redisRecorderActor"
+  )
+
+  val exportAnnotationsActor = system.actorOf(
+    ExportAnnotationsActor.props(system, redisConfig, healthzService),
+    "exportAnnotationsActor"
   )
 
   val learningDashboardActor = system.actorOf(
@@ -64,6 +67,12 @@ object Boot extends App with SystemConfiguration {
     "LearningDashboardActor"
   )
 
+  val graphqlConnectionsActor = system.actorOf(
+    GraphqlConnectionsActor.props(system, eventBus, outGW),
+    "GraphqlConnectionsActor"
+  )
+
+  ClientSettings.loadClientSettingsFromFile()
   recordingEventBus.subscribe(redisRecorderActor, outMessageChannel)
   val incomingJsonMessageBus = new IncomingJsonMessageBus
 
@@ -72,6 +81,7 @@ object Boot extends App with SystemConfiguration {
   val analyticsActorRef = system.actorOf(AnalyticsActor.props(analyticsIncludeChat))
   outBus2.subscribe(fromAkkaAppsMsgSenderActorRef, outBbbMsgMsgChannel)
   outBus2.subscribe(redisRecorderActor, recordServiceMessageChannel)
+  outBus2.subscribe(exportAnnotationsActor, outBbbMsgMsgChannel)
 
   outBus2.subscribe(analyticsActorRef, outBbbMsgMsgChannel)
   bbbMsgBus.subscribe(analyticsActorRef, analyticsChannel)
@@ -79,8 +89,14 @@ object Boot extends App with SystemConfiguration {
   outBus2.subscribe(learningDashboardActor, outBbbMsgMsgChannel)
   bbbMsgBus.subscribe(learningDashboardActor, analyticsChannel)
 
+  eventBus.subscribe(graphqlConnectionsActor, meetingManagerChannel)
+  bbbMsgBus.subscribe(graphqlConnectionsActor, analyticsChannel)
+
   val bbbActor = system.actorOf(BigBlueButtonActor.props(system, eventBus, bbbMsgBus, outGW, healthzService), "bigbluebutton-actor")
   eventBus.subscribe(bbbActor, meetingManagerChannel)
+
+  val userInfoService = UserInfoService(system, bbbActor)
+  val apiService = new ApiService(healthzService, meetingInfoService, userInfoService)
 
   val redisMessageHandlerActor = system.actorOf(ReceivedJsonMsgHandlerActor.props(bbbMsgBus, incomingJsonMessageBus))
   incomingJsonMessageBus.subscribe(redisMessageHandlerActor, toAkkaAppsJsonChannel)
@@ -101,5 +117,20 @@ object Boot extends App with SystemConfiguration {
     "redis-subscriber"
   )
 
-  val bindingFuture = Http().bindAndHandle(apiService.routes, httpHost, httpPort)
+  Http().newServerAt(httpHost, httpPort).bindFlow(apiService.routes)
+
+  new GrpcServer(system, bbbActor, grpcHost, grpcPort).run()
+}
+
+class GrpcServer(system: ActorSystem, bbbActor: ActorRef, host: String, port: Int) {
+  def run(): Future[Http.ServerBinding] = {
+    implicit val sys: ActorSystem = system
+    implicit val ec: ExecutionContext = sys.dispatcher
+    implicit val bbb: ActorRef = bbbActor
+
+    val service: HttpRequest => Future[HttpResponse] = MeetingServiceHandler(new MeetingServiceImpl())
+    val binding = Http().newServerAt(host, port).bind(service)
+    binding.foreach { binding => println(s"gRPC server bound to ${binding.localAddress}")}
+    binding
+  }
 }

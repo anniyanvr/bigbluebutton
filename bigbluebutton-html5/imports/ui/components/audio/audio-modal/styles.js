@@ -1,13 +1,11 @@
 import styled, { css, keyframes } from 'styled-components';
 import Button from '/imports/ui/components/common/button/component';
-import Modal from '/imports/ui/components/common/modal/simple/component';
+import ModalSimple from '/imports/ui/components/common/modal/simple/component';
 import { smallOnly } from '/imports/ui/stylesheets/styled-components/breakpoints';
-import {
-  colorPrimary,
-  colorGrayDark,
-} from '/imports/ui/stylesheets/styled-components/palette';
+import { colorPrimary } from '/imports/ui/stylesheets/styled-components/palette';
 import {
   mdPaddingY,
+  btnSpacing,
 } from '/imports/ui/stylesheets/styled-components/general';
 import { lineHeightComputed } from '/imports/ui/stylesheets/styled-components/typography';
 
@@ -25,6 +23,7 @@ const AudioModalButton = styled(Button)`
 
   // Modifies the audio button icon colour
   & span:first-child {
+    display: inline-block;
     color: #1b3c4b;
     background-color: #f1f8ff;
     box-shadow: none;
@@ -45,9 +44,12 @@ const AudioModalButton = styled(Button)`
 
   // Modifies the button label text
   & span:last-child {
+    display: block;
     color: black;
     font-size: 1rem;
     font-weight: 600;
+    margin-top: ${btnSpacing};
+    line-height: 1.5;
   }
 `;
 
@@ -61,6 +63,14 @@ const Connecting = styled.div`
   margin-top: auto;
   margin-bottom: auto;
   font-size: 2rem;
+  text-align: center;
+`;
+
+const ConnectingSubtext = styled.p`
+  margin-top: 0.5rem;
+  margin-bottom: 0;
+  font-size: 1.5rem;
+  text-align: center;
 `;
 
 const ellipsis = keyframes`
@@ -88,8 +98,8 @@ const ConnectingAnimation = styled.span`
   }
 `;
 
-const AudioModal = styled(Modal)`
-  padding: 1.5rem;
+const AudioModal = styled(ModalSimple)`
+  padding: 1rem;
   min-height: 20rem;
 `;
 
@@ -100,26 +110,6 @@ const BrowserWarning = styled.p`
   border-width: 3px;
   border-style: solid;
   border-radius: 0.25rem;
-`;
-
-const Header = styled.header`
-  margin: 0;
-  padding: 0;
-  border: none;
-  line-height: 2rem;
-`;
-
-const Title = styled.h2`
-  text-align: center;
-  font-weight: 400;
-  font-size: 1.3rem;
-  color: ${colorGrayDark};
-  white-space: normal;
-
-  @media ${smallOnly} {
-    font-size: 1rem;
-    padding: 0 1rem;
-  }
 `;
 
 const Content = styled.div`
@@ -156,15 +146,28 @@ const Content = styled.div`
   }
 `;
 
+const Background = styled.span`
+  ${({ isBlurred }) => isBlurred
+    && css`
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    backdrop-filter: blur(10px);
+    z-index: 998;
+    `}
+`;
+
 export default {
   AudioOptions,
   AudioModalButton,
   AudioDial,
+  Background,
   Connecting,
   ConnectingAnimation,
+  ConnectingSubtext,
   AudioModal,
   BrowserWarning,
-  Header,
-  Title,
   Content,
 };

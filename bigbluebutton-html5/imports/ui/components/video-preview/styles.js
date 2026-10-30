@@ -1,13 +1,18 @@
 import styled, { css, keyframes } from 'styled-components';
 import {
+  borderSizeSmall,
   borderSize,
   borderSizeLarge,
+  mdPaddingX,
+  titlePositionLeft,
+  lgPaddingY,
 } from '/imports/ui/stylesheets/styled-components/general';
 import {
   colorGrayLabel,
   colorWhite,
+  colorBlack,
   colorGrayLighter,
-  colorGrayDark,
+  colorGrayLightest,
   colorPrimary,
   colorText,
 } from '/imports/ui/stylesheets/styled-components/palette';
@@ -15,10 +20,15 @@ import {
   fontSizeLarge,
   lineHeightComputed,
   headingsFontWeight,
+  fontSizeLarger,
 } from '/imports/ui/stylesheets/styled-components/typography';
-import { smallOnly, landscape } from '/imports/ui/stylesheets/styled-components/breakpoints';
-import Modal from '/imports/ui/components/common/modal/simple/component';
+import { smallOnly, mediumOnly, landscape } from '/imports/ui/stylesheets/styled-components/breakpoints';
+import ModalSimple from '/imports/ui/components/common/modal/simple/component';
 import ModalStyles from '/imports/ui/components/common/modal/simple/styles';
+import Button from '/imports/ui/components/common/button/component';
+import {
+  Tab, Tabs, TabList,
+} from 'react-tabs';
 
 const Warning = styled.div`
   text-align: center;
@@ -45,18 +55,59 @@ const Col = styled.div`
   justify-content: center;
   margin: 0 0.5rem 0 0.5rem;
 
-  width: 50%;
+  @media ${smallOnly}, ${mediumOnly} {
+    justify-content: space-between;
+    align-items: center;
+    overflow: auto;
+    margin: 0;
+  }
+`;
+
+const BgnCol = styled.div`
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  justify-content: center;
+  margin: 0 0.5rem 0 0.5rem;
+
+  @media ${smallOnly} {
+    justify-content: space-between;
+    align-items: center;
+    margin: 0;
+  }
+`;
+
+const InternCol = styled.div`
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  justify-content: center;
+  margin: 0 0.5rem 0 0.5rem;
+
   @media ${smallOnly} {
     width: 90%;
-    height: unset;
   }
+`;
+
+const ContentCol = styled.div`
+  width: 60%;
+  height: 25vh;
+
+  @media ${smallOnly} {
+    width: 90%;
+  }
+`;
+
+const BackgroundCol = styled.div`
+  display: flex;
+  flex-direction: column;
 `;
 
 const VideoCol = styled(Col)`
   align-items: center;
 
   @media ${landscape} {
-     width: 33.3%;
+     width: 50%;
    }
 `;
 
@@ -95,14 +146,15 @@ const Content = styled.div`
   display: flex;
   justify-content: center;
   align-items: center;
-  overflow: auto;
+  
   color: ${colorText};
   font-weight: normal;
-  padding: ${lineHeightComputed} 0;
 
   @media ${smallOnly} {
-    flex-direction: column;
-    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: row;
+    margin: 5px;
   }
 `;
 
@@ -115,20 +167,25 @@ const BrowserWarning = styled.p`
   text-align: center;
 `;
 
-const Title = styled.div`
-  display: block;
-  color: ${colorGrayDark};
-  font-size: 1.4rem;
-  text-align: center;
-`;
-
 const Footer = styled.div`
   display: flex;
+  flex-direction: column;
+`;
+
+const FooterContainer = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: ${({ showStopAllButton }) => (showStopAllButton ? 'flex-start' : 'flex-end')};
+
+  @media ${smallOnly} {
+    display: flex;
+    flex-direction: column;
+  }
 `;
 
 const Actions = styled.div`
-  margin-left: auto;
-  margin-right: ${borderSizeLarge};
+  display: flex;
+  justify-content: flex-end;
 
   [dir="rtl"] & {
     margin-right: auto;
@@ -167,15 +224,14 @@ const ExtraActions = styled.div`
   }
 `;
 
-const VideoPreviewModal = styled(Modal)`
+const VideoPreviewModal = styled(ModalSimple)`
   padding: 1rem;
   min-height: 25rem;
-  max-height: 60vh;
+  max-height: 100vh;
 
   @media ${smallOnly} {
     height: unset;
     min-height: 22.5rem;
-    max-height: unset;
   }
 
   ${({ isPhone }) => isPhone && `
@@ -190,6 +246,17 @@ const VideoPreviewModal = styled(Modal)`
     flex-direction: column;
     justify-content: space-between;
   }
+  ${({ isBlurred }) => isBlurred && `
+    overlay: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      backdropFilter: 'blur(10px)',
+      zIndex: 998,
+    }
+  `}
 `;
 
 const ellipsis = keyframes`
@@ -230,21 +297,149 @@ const VideoPreview = styled.video`
   `}
 `;
 
+const Marker = styled.div`
+  width: 2rem;
+  text-align: center;
+`;
+
+const MarkerDynamic = styled(Marker)`
+  position: absolute;
+  top: 0;
+`;
+
+const MarkerWrapper = styled.div`
+  display: flex;
+  justify-content: space-between;
+  user-select: none;
+`;
+
+const MarkerDynamicWrapper = styled.div`
+  position: relative;
+  height: 1rem;
+  user-select: none;
+`;
+
+const Container = styled.div`
+  padding: 0 calc(${mdPaddingX} / 2 + ${borderSize});
+`;
+
+const Header = styled.div`
+  margin: 0;
+  padding: 0;
+  border: none;
+  line-height: ${titlePositionLeft};
+  margin-bottom: ${lgPaddingY};
+`;
+
+const WebcamTabs = styled(Tabs)`
+  display: flex;
+  flex-flow: column;
+
+  &:hover {
+    cursor: pointer;
+  }
+
+`;
+
+const WebcamTabList = styled(TabList)`
+  display: flex;
+  justify-content: space-around;
+  padding: 0;
+  list-style-type: none;
+`;
+
+const WebcamTabSelector = styled(Tab)`
+  display: flex;
+  justify-content: center;
+  flex-grow: 1;
+  text-align: center;
+  font-weight: bold;
+  color: ${colorGrayLighter};
+
+  &.is-selected {
+    border: none;
+    color: ${colorBlack};
+  }
+`;
+
+const HeaderSeparator = styled.div`
+  border-left: 1px solid ${colorText};
+  content: '|';
+  margin: 0 1.5rem; 
+  height: 1.5rem;
+  align-self: center;
+  opacity: 0.75;
+`;
+
+const BottomSeparator = styled.div`
+  position: relative;
+  width: 100%;
+  height: ${borderSizeSmall};
+  background-color: ${colorGrayLightest};
+  margin-top: calc(${lineHeightComputed} * 1.25);
+  margin-bottom: calc(${lineHeightComputed} * 1.25);
+`;
+
+const IconSvg = styled.img`
+  height: ${fontSizeLarger};
+  border-radius: 5px;
+  margin: 5px;
+
+  ${({ darkThemeState }) => darkThemeState && css`
+      filter: invert(1);
+    `}
+
+`;
+
+const SharingButton = styled(Button)`
+  margin: 0 0.5rem;
+  height: 2.5rem;
+`;
+
+const CancelButton = styled(Button)`
+  margin: 0 0.5rem;
+  height: 2.5rem;
+`;
+
+const StopAllButton = styled(Button)`
+  margin: 0 0.5rem;
+  height: 2.5rem;
+`;
+
 export default {
   Warning,
   Main,
   Text,
   Col,
+  BgnCol,
+  ContentCol,
+  InternCol,
+  Container,
+  Header,
+  WebcamTabs,
+  WebcamTabList,
+  WebcamTabSelector,
+  HeaderSeparator,
+  BottomSeparator,
   VideoCol,
+  BackgroundCol,
+  IconSvg,
+  SharingButton,
+  CancelButton,
+  StopAllButton,
   Label,
   Select,
   Content,
   BrowserWarning,
-  Title,
   Footer,
+  FooterContainer,
   Actions,
   ExtraActions,
   VideoPreviewModal,
   FetchingAnimation,
   VideoPreview,
+  Marker,
+  MarkerDynamic,
+  MarkerWrapper,
+  MarkerDynamicWrapper,
 };

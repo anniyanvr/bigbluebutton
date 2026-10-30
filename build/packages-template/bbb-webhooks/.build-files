@@ -3,5 +3,5 @@ bbb-webhooks.service
 before-install.sh
 before-remove.sh
 build.sh
-opts-focal.sh
+opts-noble.sh
 webhooks.nginx

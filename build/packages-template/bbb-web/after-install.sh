@@ -31,14 +31,6 @@ bbb_config() {
      $SERVLET_DIR/WEB-INF/classes/bigbluebutton.properties
 
 	#
-	# XXX
-	if id meteor > /dev/null 2>&1 ; then
-		if [ -d /var/log/bigbluebutton/html5 ]; then
-			chown -R meteor:meteor /var/log/bigbluebutton/html5
-		fi
-	fi
-
-	#
 	# Update the placementsThreshold and imageTagThreshold
 	sed -i 's/placementsThreshold=8000/placementsThreshold=800/g' $SERVLET_DIR/WEB-INF/classes/bigbluebutton.properties
 	sed -i 's/imageTagThreshold=8000/imageTagThreshold=800/g'     $SERVLET_DIR/WEB-INF/classes/bigbluebutton.properties
@@ -66,7 +58,7 @@ bbb_config() {
   touch /var/log/bigbluebutton/bbb-web.log
   chown bigbluebutton:bigbluebutton /var/log/bigbluebutton/bbb-web.log
 
-  update-java-alternatives -s java-1.11.0-openjdk-amd64
+  update-java-alternatives -s java-1.17.0-openjdk-amd64
 
   # Restart bbb-web to deploy new 
   startService bbb-web.service || echo "bbb-web.service could not be registered or started"

@@ -1,234 +1,168 @@
-import React, { useEffect, useRef } from 'react';
-import { withTracker } from 'meteor/react-meteor-data';
-import { defineMessages, injectIntl } from 'react-intl';
-import PropTypes from 'prop-types';
-import Auth from '/imports/ui/services/auth';
-import Users from '/imports/api/users';
-import Meetings from '/imports/api/meetings';
-import { notify } from '/imports/ui/services/notification';
-import CaptionsContainer from '/imports/ui/components/captions/live/container';
-import CaptionsService from '/imports/ui/components/captions/service';
+import React, { useEffect } from 'react';
+import { useMutation, useReactiveVar } from '@apollo/client';
+import AudioCaptionsLiveContainer from '/imports/ui/components/audio/audio-graphql/audio-captions/live/component';
 import getFromUserSettings from '/imports/ui/services/users-settings';
-import deviceInfo from '/imports/utils/deviceInfo';
-import UserInfos from '/imports/api/users-infos';
-import Settings from '/imports/ui/services/settings';
-import MediaService from '/imports/ui/components/media/service';
-import _ from 'lodash';
+import { useIsPresentationEnabled, useIsExternalVideoEnabled } from '/imports/ui/services/features';
+import useCurrentUser from '/imports/ui/core/hooks/useCurrentUser';
+import useMeeting from '/imports/ui/core/hooks/useMeeting';
 import {
   layoutSelect,
   layoutSelectInput,
   layoutSelectOutput,
-  layoutDispatch,
 } from '../layout/context';
-
-import {
-  getFontSize,
-  getBreakoutRooms,
-  validIOSVersion,
-} from './service';
-
-import { withModalMounter, getModal } from '/imports/ui/components/common/modal/service';
-
+import useSetSpeechOptions from '../audio/audio-graphql/hooks/useSetSpeechOptions';
+import { handleIsNotificationEnabled } from '/imports/ui/components/plugins-engine/ui-commands/notification/handler';
 import App from './component';
-import ActionsBarContainer from '../actions-bar/container';
-
-const CUSTOM_STYLE_URL = Meteor.settings.public.app.customStyleUrl;
-
-const propTypes = {
-  actionsbar: PropTypes.node,
-  meetingLayout: PropTypes.string.isRequired,
-};
-
-const defaultProps = {
-  actionsbar: <ActionsBarContainer />,
-};
-
-const intlMessages = defineMessages({
-  waitingApprovalMessage: {
-    id: 'app.guest.waiting',
-    description: 'Message while a guest is waiting to be approved',
-  },
-});
-
-const endMeeting = (code) => {
-  Session.set('codeError', code);
-  Session.set('isMeetingEnded', true);
-};
+import { PINNED_PAD_SUBSCRIPTION } from '../notes/queries';
+import useDeduplicatedSubscription from '../../core/hooks/useDeduplicatedSubscription';
+import useSettings from '../../services/settings/hooks/useSettings';
+import { SETTINGS } from '../../services/settings/enums';
+import usePresentationSwap from '../../core/hooks/usePresentationSwap';
+import { LAYOUT_TYPE } from '../layout/enums';
+import { SET_PRESENTATION_FIT_TO_WIDTH } from './app-graphql/mutations';
+import { CURRENT_PRESENTATION_PAGE_SUBSCRIPTION } from '../whiteboard/queries';
 
 const AppContainer = (props) => {
-  function usePrevious(value) {
-    const ref = useRef();
-    useEffect(() => {
-      ref.current = value;
-    });
-    return ref.current;
-  }
+  const {
+    viewScreenshare,
+  } = useSettings(SETTINGS.DATA_SAVING);
+  const { isNotificationEnabled } = useReactiveVar(handleIsNotificationEnabled);
 
   const {
-    actionsbar,
-    meetingLayout,
-    selectedLayout,
-    settingsLayout,
-    pushLayoutToEveryone,
-    currentUserId,
-    shouldShowPresentation: propsShouldShowPresentation,
-    presentationRestoreOnUpdate,
-    isPresenter,
-    randomlySelectedUser,
-    isModalOpen,
-    ...otherProps
-  } = props;
+    data: currentUser,
+  } = useCurrentUser((u) => ({
+    away: u.away,
+    raiseHand: u.raiseHand,
+    userId: u.userId,
+    presenter: u.presenter,
+  }));
 
-  const sidebarContent = layoutSelectInput((i) => i.sidebarContent);
-  const sidebarNavigation = layoutSelectInput((i) => i.sidebarNavigation);
-  const actionsBarStyle = layoutSelectOutput((i) => i.actionBar);
+  const {
+    data: currentMeeting,
+  } = useMeeting((m) => ({
+    layout: m.layout,
+    componentsFlags: m.componentsFlags,
+    isBreakout: m.isBreakout,
+    name: m.name,
+    meetingId: m.meetingId,
+  }));
+
+  const { data: currentPageInfo } = useDeduplicatedSubscription(
+    CURRENT_PRESENTATION_PAGE_SUBSCRIPTION,
+    {
+      // presenter can be undefinend leading to a bug
+      // eslint-disable-next-line no-unneeded-ternary
+      skip: currentUser?.presenter ? false : true,
+    },
+  );
+
+  const presentationRestoreOnUpdate = getFromUserSettings(
+    'bbb_force_restore_presentation_on_new_events',
+    window.meetingClientSettings.public.presentation.restoreOnUpdate,
+  );
+
+  const NOTES_CONFIG = window.meetingClientSettings.public.notes;
+
+  const {
+    darkTheme,
+  } = useSettings(SETTINGS.APPLICATION);
+
+  const { partialUtterances, minUtteranceLength } = useSettings(SETTINGS.TRANSCRIPTION);
+
+  const genericMainContent = layoutSelectInput((i) => i.genericMainContent);
   const captionsStyle = layoutSelectOutput((i) => i.captions);
   const presentation = layoutSelectInput((i) => i.presentation);
+  const sharedNotesInput = layoutSelectInput((i) => i.sharedNotes);
+  const { hideNotificationToasts } = layoutSelectInput((i) => i.notificationsBar);
+  const selectedLayout = layoutSelect((i) => i.layoutType);
+
   const layoutType = layoutSelect((i) => i.layoutType);
-  const deviceType = layoutSelect((i) => i.deviceType);
-  const layoutContextDispatch = layoutDispatch();
+  const isNonMediaLayout = [
+    LAYOUT_TYPE.CAMERAS_ONLY,
+    LAYOUT_TYPE.PARTICIPANTS_AND_CHAT_ONLY,
+  ].includes(layoutType);
+  const setSpeechOptions = useSetSpeechOptions();
+  const { data: pinnedPadData } = useDeduplicatedSubscription(PINNED_PAD_SUBSCRIPTION);
+  const isSharedNotesPinnedFromGraphql = !!pinnedPadData
+    && pinnedPadData.sharedNotes[0]?.sharedNotesExtId === NOTES_CONFIG.id;
+  const isSharedNotesPinned = sharedNotesInput?.isPinned && isSharedNotesPinnedFromGraphql;
+  const isExternalVideoEnabled = useIsExternalVideoEnabled();
+  const isPresentationEnabled = useIsPresentationEnabled();
+  const [showScreenshare] = usePresentationSwap();
+  const [setPresentationFitToWidth] = useMutation(SET_PRESENTATION_FIT_TO_WIDTH);
 
-  const { sidebarContentPanel, isOpen: sidebarContentIsOpen } = sidebarContent;
-  const { sidebarNavPanel, isOpen: sidebarNavigationIsOpen } = sidebarNavigation;
-  const { isOpen: presentationIsOpen } = presentation;
-  const shouldShowPresentation = propsShouldShowPresentation
-    && (presentationIsOpen || presentationRestoreOnUpdate);
+  const isPresenter = currentUser?.presenter;
 
-  const prevRandomUser = usePrevious(randomlySelectedUser);
+  const { isOpen } = presentation;
+  const presentationIsOpen = isOpen;
 
-  const mountRandomUserModal = !isPresenter
-  && !_.isEqual(prevRandomUser, randomlySelectedUser)
-  && randomlySelectedUser.length > 0
-  && !isModalOpen;
+  const isSharingVideo = currentMeeting?.componentsFlags.hasExternalVideo;
 
-  return currentUserId
+  const shouldShowExternalVideo = isExternalVideoEnabled && isSharingVideo;
+
+  const shouldShowGenericMainContent = !!genericMainContent.genericContentId;
+
+  const shouldShowScreenshare = (viewScreenshare || isPresenter)
+  && (currentMeeting?.componentsFlags?.hasScreenshare
+    || currentMeeting?.componentsFlags?.hasCameraAsContent) && showScreenshare;
+  const shouldShowPresentation = (!shouldShowScreenshare && !isSharedNotesPinned
+      && !shouldShowExternalVideo && !shouldShowGenericMainContent
+      && (presentationIsOpen || presentationRestoreOnUpdate)) && isPresentationEnabled;
+  const currentPageInfoData = currentPageInfo?.pres_page_curr[0] ?? {};
+  const fitToWidth = currentPageInfoData?.fitToWidth ?? false;
+  const pageId = currentPageInfoData?.pageId ?? '';
+
+  const handlePresentationFitToWidth = (ftw) => {
+    setPresentationFitToWidth({
+      variables: {
+        pageId,
+        fitToWidth: ftw,
+      },
+    });
+  };
+
+  // Update after editing app savings
+  useEffect(() => {
+    setSpeechOptions(
+      partialUtterances,
+      minUtteranceLength,
+    );
+  }, [partialUtterances, minUtteranceLength]);
+
+  if (!currentUser) return null;
+
+  return currentUser?.userId
     ? (
       <App
         {...{
-          actionsbar,
-          actionsBarStyle,
+          fitToWidth,
+          handlePresentationFitToWidth,
+          hideActionsBar: getFromUserSettings('bbb_hide_actions_bar', false)
+            || getFromUserSettings('bbb_hide_controls', false),
+          isNonMediaLayout,
+          currentUserAway: currentUser.away,
+          currentUserRaiseHand: currentUser.raiseHand,
           captionsStyle,
-          currentUserId,
-          layoutType,
-          meetingLayout,
-          selectedLayout,
-          settingsLayout,
-          pushLayoutToEveryone,
-          deviceType,
-          layoutContextDispatch,
-          sidebarNavPanel,
-          sidebarNavigationIsOpen,
-          sidebarContentPanel,
-          sidebarContentIsOpen,
+          presentationIsOpen,
+          shouldShowExternalVideo,
+          shouldShowScreenshare,
+          isSharedNotesPinned,
           shouldShowPresentation,
-          mountRandomUserModal,
-          isPresenter,
+          isNotificationEnabled,
+          genericMainContentId: genericMainContent.genericContentId,
+          audioCaptions: <AudioCaptionsLiveContainer />,
+          hideNotificationToasts: hideNotificationToasts
+            || getFromUserSettings('bbb_hide_notifications', false),
+          darkTheme,
+          selectedLayout,
+          isBreakout: currentMeeting?.isBreakout,
+          meetingName: currentMeeting?.name,
+          meetingId: currentMeeting?.meetingId,
         }}
-        {...otherProps}
+        {...props}
       />
     )
     : null;
 };
 
-const currentUserEmoji = (currentUser) => (currentUser
-  ? {
-    status: currentUser.emoji,
-    changedAt: currentUser.emojiTime,
-  }
-  : {
-    status: 'none',
-    changedAt: null,
-  }
-);
-
-export default injectIntl(withModalMounter(withTracker(({ intl, baseControls }) => {
-  Users.find({ userId: Auth.userID, meetingId: Auth.meetingID }).observe({
-    removed() {
-      endMeeting('403');
-    },
-  });
-
-  const currentUser = Users.findOne(
-    { userId: Auth.userID },
-    {
-      fields:
-      {
-        approved: 1, emoji: 1, userId: 1, presenter: 1,
-      },
-    },
-  );
-
-  const currentMeeting = Meetings.findOne({ meetingId: Auth.meetingID },
-    {
-      fields: {
-        randomlySelectedUser: 1,
-        layout: 1,
-      },
-    });
-  const {
-    randomlySelectedUser,
-    layout,
-  } = currentMeeting;
-
-  if (currentUser && !currentUser.approved) {
-    baseControls.updateLoadingState(intl.formatMessage(intlMessages.waitingApprovalMessage));
-  }
-
-  const UserInfo = UserInfos.find({
-    meetingId: Auth.meetingID,
-    requesterUserId: Auth.userID,
-  }).fetch();
-
-  const AppSettings = Settings.application;
-  const { selectedLayout } = AppSettings;
-  const { viewScreenshare } = Settings.dataSaving;
-  const shouldShowExternalVideo = MediaService.shouldShowExternalVideo();
-  const shouldShowScreenshare = MediaService.shouldShowScreenshare()
-    && (viewScreenshare || currentUser?.presenter);
-  let customStyleUrl = getFromUserSettings('bbb_custom_style_url', false);
-
-  if (!customStyleUrl && CUSTOM_STYLE_URL) {
-    customStyleUrl = CUSTOM_STYLE_URL;
-  }
-
-  const LAYOUT_CONFIG = Meteor.settings.public.layout;
-
-  return {
-    captions: CaptionsService.isCaptionsActive() ? <CaptionsContainer /> : null,
-    fontSize: getFontSize(),
-    hasBreakoutRooms: getBreakoutRooms().length > 0,
-    customStyle: getFromUserSettings('bbb_custom_style', false),
-    customStyleUrl,
-    UserInfo,
-    notify,
-    validIOSVersion,
-    isPhone: deviceInfo.isPhone,
-    isRTL: document.documentElement.getAttribute('dir') === 'rtl',
-    currentUserEmoji: currentUserEmoji(currentUser),
-    randomlySelectedUser,
-    currentUserId: currentUser?.userId,
-    isPresenter: currentUser?.presenter,
-    meetingLayout: layout,
-    selectedLayout,
-    settingsLayout: selectedLayout?.replace('Push', ''),
-    pushLayoutToEveryone: selectedLayout?.includes('Push'),
-    audioAlertEnabled: AppSettings.chatAudioAlerts,
-    pushAlertEnabled: AppSettings.chatPushAlerts,
-    darkTheme: AppSettings.darkTheme,
-    shouldShowScreenshare,
-    shouldShowPresentation: !shouldShowScreenshare && !shouldShowExternalVideo,
-    shouldShowExternalVideo,
-    isLargeFont: Session.get('isLargeFont'),
-    presentationRestoreOnUpdate: getFromUserSettings(
-      'bbb_force_restore_presentation_on_new_events',
-      Meteor.settings.public.presentation.restoreOnUpdate,
-    ),
-    hidePresentation: getFromUserSettings('bbb_hide_presentation', LAYOUT_CONFIG.hidePresentation),
-    autoSwapLayout: getFromUserSettings('bbb_auto_swap_layout', LAYOUT_CONFIG.autoSwapLayout),
-    hideActionsBar: getFromUserSettings('bbb_hide_actions_bar', false),
-    isModalOpen: !!getModal(),
-  };
-})(AppContainer)));
-
-AppContainer.defaultProps = defaultProps;
-AppContainer.propTypes = propTypes;
+export default AppContainer;

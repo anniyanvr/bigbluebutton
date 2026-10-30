@@ -4,6 +4,7 @@ import {
   colorContentBackground,
 } from '/imports/ui/stylesheets/styled-components/palette';
 import SpinnerStyles from '/imports/ui/components/common/loading-screen/styles';
+import { lgBorderRadius } from '/imports/ui/stylesheets/styled-components/general';
 
 const ScreenshareContainerInside = styled.div`
   display: flex;
@@ -30,6 +31,7 @@ const ScreenshareContainer = styled.div`
   background-color: ${colorContentBackground};
   width: 100%;
   height: 100%;
+  border-radius: ${lgBorderRadius};
 
   ${({ switched }) => !switched && `
     display: flex;
@@ -74,10 +76,6 @@ const MobileControlsOverlay = styled.span`
 const HoverToolbar = styled.div`
   ${({ toolbarStyle }) => toolbarStyle === 'hoverToolbar' && `
     display: none;
-
-    :hover > & {
-      display: flex;
-    }
   `}
 
   ${({ toolbarStyle }) => toolbarStyle === 'dontShowMobileHoverToolbar' && `
@@ -90,7 +88,37 @@ const HoverToolbar = styled.div`
   `}
 `;
 
+const ScreenshareButtonsContainterWrapper = styled.div`
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  width: 50%;
+
+  ${({ positionXAxis }) => positionXAxis === 'right' && `
+    right: 0;
+    flex-direction: row-reverse;
+  `}
+  ${({ positionXAxis }) => positionXAxis === 'left' && `
+    left: 0;
+  `}
+
+  ${({ positionYAxis }) => positionYAxis === 'top' && `
+    top: 0;
+  `}
+  ${({ positionYAxis }) => positionYAxis === 'bottom' && `
+    bottom: 0;
+  `}
+`;
+
+const FullscreenButtonWrapperForScreenshare = styled.div`
+  & > * {
+    position: relative !important;
+  }
+`;
+
 export default {
+  FullscreenButtonWrapperForScreenshare,
+  ScreenshareButtonsContainterWrapper,
   ScreenshareContainerInside,
   MainText,
   ScreenshareVideo,

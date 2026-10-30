@@ -1,13 +1,13 @@
 package org.bigbluebutton.core.apps.users
 
 import org.bigbluebutton.common2.msgs._
-import org.bigbluebutton.core.api.{ EjectUserFromBreakoutInternalMsg }
-import org.bigbluebutton.core.running.{ LiveMeeting, OutMsgRouter }
-import org.bigbluebutton.core2.message.senders.Sender
+import org.bigbluebutton.core.api.EjectUserFromBreakoutInternalMsg
 import org.bigbluebutton.core.apps.{ PermissionCheck, RightsManagementTrait }
 import org.bigbluebutton.core.bus.BigBlueButtonEvent
 import org.bigbluebutton.core.domain.MeetingState2x
+import org.bigbluebutton.core.graphql.GraphqlMiddleware
 import org.bigbluebutton.core.models.{ EjectReasonCode, RegisteredUsers }
+import org.bigbluebutton.core.running.{ LiveMeeting, OutMsgRouter }
 
 trait EjectUserFromMeetingCmdMsgHdlr extends RightsManagementTrait {
   this: UsersApp =>
@@ -15,7 +15,7 @@ trait EjectUserFromMeetingCmdMsgHdlr extends RightsManagementTrait {
   val liveMeeting: LiveMeeting
   val outGW: OutMsgRouter
 
-  def handleEjectUserFromMeetingCmdMsg(msg: EjectUserFromMeetingCmdMsg, state: MeetingState2x) {
+  def handleEjectUserFromMeetingCmdMsg(msg: EjectUserFromMeetingCmdMsg, state: MeetingState2x): Unit = {
     val meetingId = liveMeeting.props.meetingProp.intId
     val userId = msg.body.userId
     val ejectedBy = msg.body.ejectedBy
@@ -26,7 +26,7 @@ trait EjectUserFromMeetingCmdMsgHdlr extends RightsManagementTrait {
       PermissionCheck.VIEWER_LEVEL,
       liveMeeting.users2x,
       msg.header.userId
-    ) || liveMeeting.props.meetingProp.isBreakout) {
+    )) {
 
       val reason = "No permission to eject user from meeting."
       PermissionCheck.ejectUserForFailedPermission(meetingId, msg.header.userId, reason, outGW, liveMeeting)
@@ -51,7 +51,7 @@ trait EjectUserFromMeetingCmdMsgHdlr extends RightsManagementTrait {
               breakoutModel <- state.breakout
             } yield {
               breakoutModel.rooms.values.foreach { room =>
-                room.users.filter(u => u.id == ru.externId + "-" + room.sequence).foreach(user => {
+                room.users.filter(u => u.id == ru.id + "-" + room.sequence).foreach(user => {
                   eventBus.publish(BigBlueButtonEvent(room.id, EjectUserFromBreakoutInternalMsg(meetingId, room.id, user.id, ejectedBy, reason, EjectReasonCode.EJECT_USER, ban)))
                 })
               }
@@ -70,8 +70,8 @@ trait EjectUserFromMeetingCmdMsgHdlr extends RightsManagementTrait {
 
             log.info("Eject user {} userId={} by {} and ban=" + banUser + " in meeting {}", registeredUser.name, userId, ejectedBy, meetingId)
 
-            // send a system message to force disconnection
-            Sender.sendDisconnectClientSysMsg(meetingId, ru.id, ejectedBy, EjectReasonCode.EJECT_USER, outGW)
+            // Force reconnection with graphql to refresh permissions
+            GraphqlMiddleware.requestGraphqlReconnection(registeredUser.sessionToken, EjectReasonCode.EJECT_USER)
           }
         } else {
           // User is ejecting self, so just eject this userid not all sessions if joined using multiple
@@ -86,8 +86,9 @@ trait EjectUserFromMeetingCmdMsgHdlr extends RightsManagementTrait {
             EjectReasonCode.EJECT_USER,
             ban = false
           )
-          // send a system message to force disconnection
-          Sender.sendDisconnectClientSysMsg(meetingId, userId, ejectedBy, EjectReasonCode.EJECT_USER, outGW)
+
+          // Force reconnection with graphql to refresh permissions
+          GraphqlMiddleware.requestGraphqlReconnection(registeredUser.sessionToken, EjectReasonCode.EJECT_USER)
         }
 
       }
@@ -101,8 +102,7 @@ trait EjectUserFromMeetingSysMsgHdlr {
   val liveMeeting: LiveMeeting
   val outGW: OutMsgRouter
 
-  def handleEjectUserFromMeetingSysMsg(msg: EjectUserFromMeetingSysMsg) {
-    val meetingId = liveMeeting.props.meetingProp.intId
+  def handleEjectUserFromMeetingSysMsg(msg: EjectUserFromMeetingSysMsg): Unit = {
     val userId = msg.body.userId
     val ejectedBy = msg.body.ejectedBy
 
@@ -116,7 +116,12 @@ trait EjectUserFromMeetingSysMsgHdlr {
       EjectReasonCode.SYSTEM_EJECT_USER,
       ban = false
     )
-    // send a system message to force disconnection
-    Sender.sendDisconnectClientSysMsg(meetingId, userId, ejectedBy, EjectReasonCode.SYSTEM_EJECT_USER, outGW)
+
+    // Force reconnection with graphql to refresh permissions
+    for {
+      regUser <- RegisteredUsers.findWithUserId(userId, liveMeeting.registeredUsers)
+    } yield {
+      GraphqlMiddleware.requestGraphqlReconnection(regUser.sessionToken, EjectReasonCode.SYSTEM_EJECT_USER)
+    }
   }
 }

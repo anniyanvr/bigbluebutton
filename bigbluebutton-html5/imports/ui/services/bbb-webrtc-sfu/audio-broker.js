@@ -1,5 +1,6 @@
 import logger from '/imports/startup/client/logger';
 import BaseBroker from '/imports/ui/services/bbb-webrtc-sfu/sfu-base-broker';
+import WebRtcPeer from '/imports/ui/services/webrtc-base/peer';
 
 const ON_ICE_CANDIDATE_MSG = 'iceCandidate';
 const SUBSCRIBER_ANSWER = 'subscriberAnswer';
@@ -17,14 +18,25 @@ class AudioBroker extends BaseBroker {
     this.role = role;
     this.offering = true;
 
-    // Optional parameters are: caleeName, iceServers, offering,
-    // mediaServer, extension, constraints, stream
+    // Optional parameters are:
+    // clientSessionNumber
+    // iceServers,
+    // offering,
+    // mediaServer,
+    // extension,
+    // constraints,
+    // stream,
+    // signalCandidates
+    // traceLogs
+    // networkPriority
+    // gatheringTimeout
+    // transparentListenOnly
     Object.assign(this, options);
   }
 
   getLocalStream() {
-    if (this.webRtcPeer && this.webRtcPeer.peerConnection) {
-      return this.webRtcPeer.peerConnection.getLocalStreams()[0];
+    if (this.webRtcPeer && typeof this.webRtcPeer.getLocalStream === 'function') {
+      return this.webRtcPeer.getLocalStream();
     }
 
     return null;
@@ -40,13 +52,13 @@ class AudioBroker extends BaseBroker {
     const localStream = this.getLocalStream();
     const oldTracks = localStream ? localStream.getAudioTracks() : [];
 
-    peerConnection.getSenders().forEach((sender, index) => {
-      if (sender.track && sender.track.kind === 'audio') {
-        const newTrack = newTracks[index];
+    peerConnection.getSenders().forEach((sender) => {
+      if (sender.track == null || sender?.track?.kind === 'audio') {
+        const newTrack = newTracks.shift();
         if (newTrack == null) return;
 
         // Cleanup old tracks in the local MediaStream
-        const oldTrack = oldTracks[index];
+        const oldTrack = oldTracks.shift();
         sender.replaceTrack(newTrack);
         if (oldTrack) {
           oldTrack.stop();
@@ -56,58 +68,78 @@ class AudioBroker extends BaseBroker {
       }
     });
 
+    if (oldTracks.length > 0) {
+      oldTracks.forEach((track) => {
+        track.stop();
+        localStream.removeTrack(track);
+      });
+    }
+
     return Promise.resolve();
   }
 
   _join() {
     return new Promise((resolve, reject) => {
-      const options = {
-        audioStream: this.stream,
-        mediaConstraints: {
-          audio: this.constraints ? this.constraints : true,
-          video: false,
-        },
-        configuration: this.populatePeerConfiguration(),
-        onicecandidate: (candidate) => {
-          this.onIceCandidate(candidate, this.role);
-        },
-      };
+      try {
+        const options = {
+          audioStream: this.stream,
+          mediaConstraints: {
+            audio: this.constraints ? this.constraints : true,
+            video: false,
+          },
+          configuration: this.populatePeerConfiguration(),
+          onicecandidate: !this.signalCandidates ? null : (candidate) => {
+            this.onIceCandidate(candidate, this.role);
+          },
+          trace: this.traceLogs,
+          networkPriorities: this.networkPriority ? { audio: this.networkPriority } : undefined,
+          mediaStreamFactory: this.mediaStreamFactory,
+          gatheringTimeout: this.gatheringTimeout,
+        };
 
-      const WebRTCPeer = (this.role === 'sendrecv')
-        ? window.kurentoUtils.WebRtcPeer.WebRtcPeerSendrecv
-        : window.kurentoUtils.WebRtcPeer.WebRtcPeerRecvonly;
-
-      this.webRtcPeer = WebRTCPeer(options, (error) => {
-        if (error) {
-          // 1305: "PEER_NEGOTIATION_FAILED",
-          const normalizedError = BaseBroker.assembleError(1305);
-          logger.error({
-            logCode: `${this.logCodePrefix}_peer_creation_failed`,
-            extraInfo: {
-              errorMessage: error.name || error.message || 'Unknown error',
-              errorCode: normalizedError.errorCode,
-              sfuComponent: this.sfuComponent,
-              started: this.started,
-            },
-          }, 'Audio peer creation failed');
-          this.onerror(normalizedError);
-          return reject(normalizedError);
-        }
-
+        const peerRole = BaseBroker.getPeerRole(this.role);
+        this.webRtcPeer = new WebRtcPeer(peerRole, options);
+        window.peers = window.peers || [];
+        window.peers.push(this.webRtcPeer);
         this.webRtcPeer.iceQueue = [];
+        this.webRtcPeer.start();
+        this.webRtcPeer.peerConnection.onconnectionstatechange = this.handleConnectionStateChange.bind(this);
 
         if (this.offering) {
-          this.webRtcPeer.generateOffer(this.onOfferGenerated.bind(this));
-        } else {
+          // We are the offerer
+          this.webRtcPeer.generateOffer()
+            .then(this.sendStartReq.bind(this))
+            .catch(this._handleOfferGenerationFailure.bind(this));
+        } else if (peerRole === 'recvonly'
+          || peerRole === 'recv'
+          || peerRole === 'passive-sendrecv') {
+          // We are the answerer and we are only listening, so we don't need
+          // to acquire local media
           this.sendStartReq();
+        } else {
+          // We are the answerer and we are sending audio, so we need to acquire
+          // local media before sending the start request
+          this.webRtcPeer.mediaStreamFactory()
+            .then(() => { this.sendStartReq(); })
+            .catch(this._handleOfferGenerationFailure.bind(this));
         }
 
-        return resolve();
-      });
-
-      this.webRtcPeer.peerConnection.onconnectionstatechange = this
-        .handleConnectionStateChange.bind(this);
-      return resolve();
+        resolve();
+      } catch (error) {
+        // 1305: "PEER_NEGOTIATION_FAILED",
+        const normalizedError = BaseBroker.assembleError(1305);
+        logger.error({
+          logCode: `${this.logCodePrefix}_peer_creation_failed`,
+          extraInfo: {
+            errorMessage: error.name || error.message || 'Unknown error',
+            errorCode: normalizedError.errorCode,
+            sfuComponent: this.sfuComponent,
+            started: this.started,
+          },
+        }, 'Audio peer creation failed');
+        this.onerror(normalizedError);
+        reject(normalizedError);
+      }
     });
   }
 
@@ -129,6 +161,9 @@ class AudioBroker extends BaseBroker {
       case 'webRTCAudioSuccess':
         this.onstart(parsedMessage.success);
         this.started = true;
+        break;
+      case 'restartIceResponse':
+        this.handleRestartIceResponse(parsedMessage);
         break;
       case 'webRTCAudioError':
       case 'error':
@@ -185,10 +220,11 @@ class AudioBroker extends BaseBroker {
       id: 'start',
       type: this.sfuComponent,
       role: this.role,
-      caleeName: this.caleeName,
+      clientSessionNumber: this.clientSessionNumber,
       sdpOffer: offer,
       mediaServer: this.mediaServer,
       extension: this.extension,
+      transparentListenOnly: this.transparentListenOnly,
     };
 
     logger.debug({
@@ -199,7 +235,7 @@ class AudioBroker extends BaseBroker {
     this.sendMessage(message);
   }
 
-  onOfferGenerated(error, sdpOffer) {
+  _handleOfferGenerationFailure(error) {
     if (error) {
       logger.error({
         logCode: `${this.logCodePrefix}_offer_failure`,
@@ -211,8 +247,6 @@ class AudioBroker extends BaseBroker {
       // 1305: "PEER_NEGOTIATION_FAILED",
       this.onerror(error);
     }
-
-    this.sendStartReq(sdpOffer);
   }
 
   dtmf(tones) {

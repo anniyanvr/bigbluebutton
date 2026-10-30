@@ -1,33 +1,42 @@
-import React from 'react';
-import PropTypes from 'prop-types';
-import { layoutSelect, layoutSelectInput } from '/imports/ui/components/layout/context';
-import DEFAULT_VALUES from '/imports/ui/components/layout/defaultValues';
+import React, { useEffect } from 'react';
+import { layoutSelect, layoutSelectInput, layoutSelectOutput } from '/imports/ui/components/layout/context';
+import DEFAULT_VALUES, { SIDEBAR_CONTENT_MARGIN_TO_MEDIA } from '/imports/ui/components/layout/defaultValues';
 import { LAYOUT_TYPE, DEVICE_TYPE } from '/imports/ui/components/layout/enums';
 
 import CustomLayout from '/imports/ui/components/layout/layout-manager/customLayout';
 import SmartLayout from '/imports/ui/components/layout/layout-manager/smartLayout';
 import PresentationFocusLayout from '/imports/ui/components/layout/layout-manager/presentationFocusLayout';
 import VideoFocusLayout from '/imports/ui/components/layout/layout-manager/videoFocusLayout';
+import CamerasOnlyLayout from '/imports/ui/components/layout/layout-manager/camerasOnly';
+import PresentationOnlyLayout from '/imports/ui/components/layout/layout-manager/presentationOnlyLayout';
+import ParticipantsAndChatOnlyLayout from '/imports/ui/components/layout/layout-manager/participantsAndChatOnlyLayout';
+import { useIsPresentationEnabled } from '/imports/ui/services/features';
+import Session from '/imports/ui/services/storage/in-memory';
+import MediaOnlyLayout from './mediaOnlyLayout';
+import { usePrevious } from '../../whiteboard/utils';
 
-const propTypes = {
-  layoutType: PropTypes.string.isRequired,
-};
-
-const LayoutEngine = ({ layoutType }) => {
+const LayoutEngine = () => {
   const bannerBarInput = layoutSelectInput((i) => i.bannerBar);
   const notificationsBarInput = layoutSelectInput((i) => i.notificationsBar);
   const cameraDockInput = layoutSelectInput((i) => i.cameraDock);
   const presentationInput = layoutSelectInput((i) => i.presentation);
   const actionbarInput = layoutSelectInput((i) => i.actionBar);
+  const navBarInput = layoutSelectInput((i) => i.navBar);
+  const navBarOutput = layoutSelectOutput((i) => i.navBar);
   const sidebarNavigationInput = layoutSelectInput((i) => i.sidebarNavigation);
   const sidebarContentInput = layoutSelectInput((i) => i.sidebarContent);
   const externalVideoInput = layoutSelectInput((i) => i.externalVideo);
+  const genericMainContentInput = layoutSelectInput((i) => i.genericMainContent);
   const screenShareInput = layoutSelectInput((i) => i.screenShare);
+  const sharedNotesInput = layoutSelectInput((i) => i.sharedNotes);
 
   const fullscreen = layoutSelect((i) => i.fullscreen);
   const isRTL = layoutSelect((i) => i.isRTL);
   const fontSize = layoutSelect((i) => i.fontSize);
   const deviceType = layoutSelect((i) => i.deviceType);
+  const selectedLayout = layoutSelect((i) => i.layoutType);
+  const isPresentationEnabled = useIsPresentationEnabled();
+  const prevLayout = usePrevious(selectedLayout);
 
   const isMobile = deviceType === DEVICE_TYPE.MOBILE;
   const isTablet = deviceType === DEVICE_TYPE.TABLET;
@@ -35,6 +44,16 @@ const LayoutEngine = ({ layoutType }) => {
   const windowHeight = () => window.document.documentElement.clientHeight;
   const min = (value1, value2) => (value1 <= value2 ? value1 : value2);
   const max = (value1, value2) => (value1 >= value2 ? value1 : value2);
+
+  useEffect(() => {
+    // If it has build one time, then set the flag to true
+    // This will prevent layout-engine to initiate the enforced layout with the
+    // default configurations.
+    const hasLayoutEngineLoadedOnce = Session.getItem('hasLayoutEngineLoadedOnce');
+    if (!hasLayoutEngineLoadedOnce) {
+      Session.setItem('hasLayoutEngineLoadedOnce', true);
+    }
+  }, []);
 
   const bannerAreaHeight = () => {
     const { hasNotification } = notificationsBarInput;
@@ -46,28 +65,32 @@ const LayoutEngine = ({ layoutType }) => {
   };
 
   const baseCameraDockBounds = (mediaAreaBounds, sidebarSize) => {
-    const { isOpen, currentSlide } = presentationInput;
-    const { num: currentSlideNumber } = currentSlide;
+    const { isOpen, slidesLength } = presentationInput;
     const { hasExternalVideo } = externalVideoInput;
+    const { genericContentId } = genericMainContentInput;
     const { hasScreenShare } = screenShareInput;
+    const { isPinned: isSharedNotesPinned } = sharedNotesInput;
 
     const cameraDockBounds = {};
 
-    if (cameraDockInput.numCameras === 0) {
+    if (cameraDockInput.numCameras === 0 && selectedLayout !== LAYOUT_TYPE.VIDEO_FOCUS) {
       cameraDockBounds.width = 0;
       cameraDockBounds.height = 0;
 
       return cameraDockBounds;
     }
 
-    const isSmartLayout = (layoutType === LAYOUT_TYPE.SMART_LAYOUT);
+    const hasPresentation = isPresentationEnabled && slidesLength !== 0;
+    const isGeneralMediaOff = !hasPresentation
+      && !hasExternalVideo && !hasScreenShare
+      && !isSharedNotesPinned && !genericContentId;
 
-    if (!isOpen || (isSmartLayout && currentSlideNumber === 0 && !hasExternalVideo && !hasScreenShare)) {
+    if (!isOpen || isGeneralMediaOff) {
       cameraDockBounds.width = mediaAreaBounds.width;
       cameraDockBounds.maxWidth = mediaAreaBounds.width;
-      cameraDockBounds.height = mediaAreaBounds.height - bannerAreaHeight();
+      cameraDockBounds.height = mediaAreaBounds.height;
       cameraDockBounds.maxHeight = mediaAreaBounds.height;
-      cameraDockBounds.top = DEFAULT_VALUES.navBarHeight + bannerAreaHeight();
+      cameraDockBounds.top = mediaAreaBounds.top;
       cameraDockBounds.left = !isRTL ? mediaAreaBounds.left : 0;
       cameraDockBounds.right = isRTL ? sidebarSize : null;
     }
@@ -90,8 +113,28 @@ const LayoutEngine = ({ layoutType }) => {
     return cameraDockBounds;
   };
 
+  const calculatesNavbarHeight = () => {
+    const { navBarHeight } = DEFAULT_VALUES;
+
+    const finalHeight = navBarOutput.hideTopRow ? navBarHeight / 2 : navBarHeight;
+
+    return navBarInput.hasNavBar ? finalHeight : 0;
+  };
+
   const calculatesNavbarBounds = (mediaAreaBounds) => {
-    const { navBarHeight, navBarTop } = DEFAULT_VALUES;
+    const { navBarTop } = DEFAULT_VALUES;
+
+    const navBarHeight = calculatesNavbarHeight();
+
+    if (!navBarInput.hasNavBar) {
+      return {
+        width: 0,
+        height: 0,
+        top: 0,
+        left: 0,
+        zIndex: 0,
+      };
+    }
 
     return {
       width: mediaAreaBounds.width,
@@ -103,6 +146,14 @@ const LayoutEngine = ({ layoutType }) => {
   };
 
   const calculatesActionbarHeight = () => {
+    if (!actionbarInput.hasActionBar) {
+      return {
+        height: 0,
+        innerHeight: 0,
+        padding: 0,
+      };
+    }
+
     const { actionBarHeight, actionBarPadding } = DEFAULT_VALUES;
 
     const BASE_FONT_SIZE = 14; // 90% font size
@@ -132,66 +183,73 @@ const LayoutEngine = ({ layoutType }) => {
 
   const calculatesSidebarNavWidth = () => {
     const {
-      sidebarNavMinWidth,
-      sidebarNavMaxWidth,
+      sidebarNavWidth,
+      sidebarNavWidthMobile,
     } = DEFAULT_VALUES;
 
-    const { isOpen, width: sidebarNavWidth } = sidebarNavigationInput;
+    const { isOpen } = sidebarNavigationInput;
 
-    let minWidth = 0;
     let width = 0;
-    let maxWidth = 0;
+    let horizontalSpaceOccupied = 0;
     if (isOpen) {
       if (isMobile) {
-        minWidth = windowWidth();
-        width = windowWidth();
-        maxWidth = windowWidth();
+        width = sidebarNavWidthMobile;
+        // The navigation sidebar is a floating window on mobile. We say it does not
+        // occupy any space, so that its width is not taken into account when calculating the
+        // position of other layout elements.
+        horizontalSpaceOccupied = 0;
       } else {
-        if (sidebarNavWidth === 0) {
-          width = min(max((windowWidth() * 0.2), sidebarNavMinWidth), sidebarNavMaxWidth);
-        } else {
-          width = min(max(sidebarNavWidth, sidebarNavMinWidth), sidebarNavMaxWidth);
-        }
-        minWidth = sidebarNavMinWidth;
-        maxWidth = sidebarNavMaxWidth;
+        width = sidebarNavWidth;
+        horizontalSpaceOccupied = sidebarNavWidth;
       }
     }
     return {
-      minWidth,
       width,
-      maxWidth,
+      horizontalSpaceOccupied,
     };
   };
 
   const calculatesSidebarNavHeight = () => {
-    const { navBarHeight } = DEFAULT_VALUES;
+    const {
+      sidebarNavHeightPercentage,
+      sidebarNavHeightPercentageMobile,
+    } = DEFAULT_VALUES;
     const { isOpen } = sidebarNavigationInput;
 
-    let sidebarNavHeight = 0;
+    let sidebarNavigationHeight = 0;
+    let availableHeight = windowHeight();
     if (isOpen) {
       if (isMobile) {
-        sidebarNavHeight = windowHeight() - navBarHeight - bannerAreaHeight();
+        // The navigation sidebar is a floating tile on mobile, so it should
+        // not take into account the banner and navbar height when calculating
+        // its height.
+        sidebarNavigationHeight = availableHeight * sidebarNavHeightPercentageMobile;
       } else {
-        sidebarNavHeight = windowHeight() - bannerAreaHeight();
+        availableHeight -= bannerAreaHeight();
+        sidebarNavigationHeight = availableHeight * sidebarNavHeightPercentage;
       }
     }
-    return sidebarNavHeight;
+    return sidebarNavigationHeight;
   };
 
-  const calculatesSidebarNavBounds = () => {
-    const { sidebarNavTop, navBarHeight, sidebarNavLeft } = DEFAULT_VALUES;
+  const calculatesSidebarNavBounds = (sidebarNavHeight) => {
+    const {
+      sidebarNavMarginToTheEdgeMobile,
+    } = DEFAULT_VALUES;
 
-    let top = sidebarNavTop + bannerAreaHeight();
-
-    if (isMobile) {
-      top = navBarHeight + bannerAreaHeight();
+    let left = null;
+    let right = null;
+    if (isRTL) {
+      right = isMobile ? sidebarNavMarginToTheEdgeMobile : 0;
+    } else {
+      left = isMobile ? sidebarNavMarginToTheEdgeMobile : 0;
     }
 
     return {
-      top,
-      left: !isRTL ? sidebarNavLeft : null,
-      right: isRTL ? sidebarNavLeft : null,
-      zIndex: isMobile ? 11 : 2,
+      top: isMobile ? (windowHeight() - sidebarNavHeight) / 2 : bannerAreaHeight(),
+      left,
+      right,
+      zIndex: isMobile ? 12 : 2,
     };
   };
 
@@ -233,9 +291,9 @@ const LayoutEngine = ({ layoutType }) => {
   };
 
   const calculatesSidebarContentBounds = (sidebarNavWidth) => {
-    const { navBarHeight, sidebarNavTop } = DEFAULT_VALUES;
+    const { navBarHeight } = DEFAULT_VALUES;
 
-    let top = sidebarNavTop + bannerAreaHeight();
+    let top = bannerAreaHeight();
 
     if (isMobile) top = navBarHeight + bannerAreaHeight();
 
@@ -244,7 +302,7 @@ const LayoutEngine = ({ layoutType }) => {
     left = !isRTL ? left : null;
     right = isRTL ? right : null;
 
-    const zIndex = isMobile ? 11 : 1;
+    const zIndex = isMobile ? 11 : 2;
 
     return {
       top,
@@ -254,29 +312,36 @@ const LayoutEngine = ({ layoutType }) => {
     };
   };
 
-  const calculatesMediaAreaBounds = (sidebarNavWidth, sidebarContentWidth) => {
-    const { navBarHeight } = DEFAULT_VALUES;
+  const calculatesMediaAreaBounds = (
+    sidebarNavWidth,
+    sidebarContentWidth,
+    margin = 0,
+  ) => {
     const { height: actionBarHeight } = calculatesActionbarHeight();
+    const navBarHeight = calculatesNavbarHeight();
+
     let left = 0;
     let width = 0;
     if (isMobile) {
       width = windowWidth();
     } else {
       left = !isRTL ? sidebarNavWidth + sidebarContentWidth : 0;
-      width = windowWidth() - sidebarNavWidth - sidebarContentWidth;
+      width = windowWidth()
+        - sidebarNavWidth - sidebarContentWidth - SIDEBAR_CONTENT_MARGIN_TO_MEDIA;
     }
 
     return {
-      width,
-      height: windowHeight() - (navBarHeight + actionBarHeight + bannerAreaHeight()),
-      top: navBarHeight + bannerAreaHeight(),
-      left,
+      width: width - (2 * margin),
+      height: windowHeight() - (navBarHeight + actionBarHeight + bannerAreaHeight() + (2 * margin)),
+      top: navBarHeight + bannerAreaHeight() + margin,
+      left: left + margin,
     };
   };
 
   const common = {
     bannerAreaHeight,
     baseCameraDockBounds,
+    calculatesNavbarHeight,
     calculatesNavbarBounds,
     calculatesActionbarHeight,
     calculatesActionbarBounds,
@@ -288,22 +353,40 @@ const LayoutEngine = ({ layoutType }) => {
     calculatesMediaAreaBounds,
     isMobile,
     isTablet,
+    prevLayout,
   };
 
-  switch (layoutType) {
+  const layout = document.getElementById('layout');
+
+  switch (selectedLayout) {
     case LAYOUT_TYPE.CUSTOM_LAYOUT:
-      return <CustomLayout {...common} />;
+      layout?.setAttribute('data-layout', LAYOUT_TYPE.CUSTOM_LAYOUT);
+      return <CustomLayout {...common} isPresentationEnabled={isPresentationEnabled} />;
     case LAYOUT_TYPE.SMART_LAYOUT:
-      return <SmartLayout {...common} />;
+      layout?.setAttribute('data-layout', LAYOUT_TYPE.SMART_LAYOUT);
+      return <SmartLayout {...common} isPresentationEnabled={isPresentationEnabled} />;
     case LAYOUT_TYPE.PRESENTATION_FOCUS:
-      return <PresentationFocusLayout {...common} />;
+      layout?.setAttribute('data-layout', LAYOUT_TYPE.PRESENTATION_FOCUS);
+      return <PresentationFocusLayout {...common} isPresentationEnabled={isPresentationEnabled} />;
     case LAYOUT_TYPE.VIDEO_FOCUS:
-      return <VideoFocusLayout {...common} />;
+      layout?.setAttribute('data-layout', LAYOUT_TYPE.VIDEO_FOCUS);
+      return <VideoFocusLayout {...common} isPresentationEnabled={isPresentationEnabled} />;
+    case LAYOUT_TYPE.CAMERAS_ONLY:
+      layout?.setAttribute('data-layout', LAYOUT_TYPE.CAMERAS_ONLY);
+      return <CamerasOnlyLayout {...common} />;
+    case LAYOUT_TYPE.PRESENTATION_ONLY:
+      layout?.setAttribute('data-layout', LAYOUT_TYPE.PRESENTATION_ONLY);
+      return <PresentationOnlyLayout {...common} />;
+    case LAYOUT_TYPE.PARTICIPANTS_AND_CHAT_ONLY:
+      layout?.setAttribute('data-layout', LAYOUT_TYPE.PARTICIPANTS_AND_CHAT_ONLY);
+      return <ParticipantsAndChatOnlyLayout {...common} />;
+    case LAYOUT_TYPE.MEDIA_ONLY:
+      layout?.setAttribute('data-layout', LAYOUT_TYPE.MEDIA_ONLY);
+      return <MediaOnlyLayout {...common} isPresentationEnabled={isPresentationEnabled} />;
     default:
-      return <CustomLayout {...common} />;
+      layout?.setAttribute('data-layout', LAYOUT_TYPE.CUSTOM_LAYOUT);
+      return <CustomLayout {...common} isPresentationEnabled={isPresentationEnabled} />;
   }
 };
-
-LayoutEngine.propTypes = propTypes;
 
 export default LayoutEngine;

@@ -1,15 +1,14 @@
-import _ from 'lodash';
-
-const MEDIA = Meteor.settings.public.media;
-const STUN_TURN_FETCH_URL = MEDIA.stunTurnServersFetchAddress;
-const CACHE_STUN_TURN = MEDIA.cacheStunTurnServers;
-const FALLBACK_STUN_SERVER = MEDIA.fallbackStunServer;
-
 let STUN_TURN_DICT;
 let MAPPED_STUN_TURN_DICT;
+let TURN_CACHE_VALID_UNTIL = Math.floor(Date.now() / 1000);
+let HAS_SEEN_TURN_SERVER = false;
 
 const fetchStunTurnServers = function (sessionToken) {
-  if (STUN_TURN_DICT && CACHE_STUN_TURN) return Promise.resolve(STUN_TURN_DICT);
+  const now = Math.floor(Date.now() / 1000);
+  const MEDIA = window.meetingClientSettings.public.media;
+  const CACHE_STUN_TURN = MEDIA.cacheStunTurnServers;
+
+  if (STUN_TURN_DICT && CACHE_STUN_TURN && now < TURN_CACHE_VALID_UNTIL) return Promise.resolve(STUN_TURN_DICT);
 
   const handleStunTurnResponse = ({ stunServers, turnServers }) => {
     if (!stunServers && !turnServers) {
@@ -17,14 +16,23 @@ const fetchStunTurnServers = function (sessionToken) {
     }
 
     const turnReply = [];
-    _.each(turnServers, (turnEntry) => {
+    let max_ttl = null;
+    turnServers.forEach((turnEntry) => {
       const { password, url, username } = turnEntry;
+      const valid_until = parseInt(username.split(':')[0]);
+      if (!max_ttl) {
+        max_ttl = valid_until;
+      } else if (valid_until < max_ttl) {
+        max_ttl = valid_until;
+      }
       turnReply.push({
         urls: url,
         password,
         username,
       });
+      HAS_SEEN_TURN_SERVER = true;
     });
+    TURN_CACHE_VALID_UNTIL = max_ttl;
 
     const stDictionary = {
       stun: stunServers.map(server => server.url),
@@ -35,6 +43,8 @@ const fetchStunTurnServers = function (sessionToken) {
 
     return Promise.resolve(stDictionary);
   };
+
+  const STUN_TURN_FETCH_URL = window.meetingClientSettings.public.media.stunTurnServersFetchAddress;
 
   const url = `${STUN_TURN_FETCH_URL}?sessionToken=${sessionToken}`;
   return fetch(url, { credentials: 'include' })
@@ -49,16 +59,26 @@ const mapStunTurn = ({ stun, turn }) => {
 };
 
 const getFallbackStun = () => {
+  const FALLBACK_STUN_SERVER = window.meetingClientSettings.public.media.fallbackStunServer;
+
   const stun = FALLBACK_STUN_SERVER ? [FALLBACK_STUN_SERVER] : [];
   return { stun, turn: [] };
 };
 
-const getMappedFallbackStun = () => (FALLBACK_STUN_SERVER ? [{ urls: FALLBACK_STUN_SERVER }] : []);
+const getMappedFallbackStun = () => {
+  const FALLBACK_STUN_SERVER = window.meetingClientSettings.public.media.fallbackStunServer;
+
+  return (FALLBACK_STUN_SERVER ? [{ urls: FALLBACK_STUN_SERVER }] : []);
+};
 
 const fetchWebRTCMappedStunTurnServers = function (sessionToken) {
+  const MEDIA = window.meetingClientSettings.public.media;
+  const CACHE_STUN_TURN = MEDIA.cacheStunTurnServers;
+
   return new Promise(async (resolve, reject) => {
     try {
-      if (MAPPED_STUN_TURN_DICT && CACHE_STUN_TURN) {
+      const now = Math.floor(Date.now() / 1000);
+      if (MAPPED_STUN_TURN_DICT && CACHE_STUN_TURN && now < TURN_CACHE_VALID_UNTIL) {
         return resolve(MAPPED_STUN_TURN_DICT);
       }
 
@@ -72,9 +92,14 @@ const fetchWebRTCMappedStunTurnServers = function (sessionToken) {
   });
 };
 
+const hasTurnServer = () => {
+  return HAS_SEEN_TURN_SERVER;
+}
+
 export {
   fetchStunTurnServers,
   fetchWebRTCMappedStunTurnServers,
   getFallbackStun,
   getMappedFallbackStun,
+  hasTurnServer,
 };

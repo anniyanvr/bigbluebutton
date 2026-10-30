@@ -23,7 +23,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.bigbluebutton.api2.IBbbWebApiGWApp;
-import org.bigbluebutton.presentation.messages.OfficeDocConversionProgress;
+import org.bigbluebutton.presentation.messages.DocConversionProgress;
+import org.bigbluebutton.presentation.messages.OfficeToPdfConversionFailed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,8 +52,19 @@ public class OfficeToPdfConversionSuccessFilter {
     return ConversionMessageConstants.OFFICE_DOC_CONVERSION_SUCCESS_KEY.equals(pres.getConversionStatus());
   }
 
+  public void sendOfficeToPdfConversionFailed(UploadedPresentation pres) {
+    OfficeToPdfConversionFailed error = new OfficeToPdfConversionFailed(pres.getPodId(),
+            pres.getMeetingId(),
+            pres.getName(),
+            ConversionMessageConstants.OFFICE_DOC_CONVERSION_FAILED_KEY,
+            pres.getTemporaryPresentationId(),
+            pres.getId(),
+            3);
+    gw.sendDocConversionMsg(error);
+  }
+
   public void sendProgress(UploadedPresentation pres) {
-    OfficeDocConversionProgress progress = new OfficeDocConversionProgress(pres.getPodId(),
+    DocConversionProgress progress = new DocConversionProgress(pres.getPodId(),
       pres.getMeetingId(),
       pres.getId(),
       pres.getId(),
@@ -61,7 +73,8 @@ public class OfficeToPdfConversionSuccessFilter {
       "notUsedYet",
       pres.isDownloadable(),
       pres.isRemovable(),
-      pres.getConversionStatus());
+      pres.getConversionStatus(),
+      pres.getTemporaryPresentationId());
     gw.sendDocConversionMsg(progress);
   }
 

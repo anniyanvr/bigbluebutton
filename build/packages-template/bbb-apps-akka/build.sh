@@ -16,10 +16,17 @@ find -name build.sbt -exec sed -i "s|\(.*org.bigbluebutton.*bbb-common-message[^
 
 export JAVA_TOOL_OPTIONS=-Dfile.encoding=UTF8
 
+# Compile Protobuf for grpc msgs
+cd bbb-common-grpc
+sbt compile
+cd ..
+
+# Compile common message for redis msgs
 cd bbb-common-message
 sbt publish
 sbt publishLocal
 cd ..
+
 
 cd akka-bbb-apps
 sed -i 's/\r$//' project/Dependencies.scala
@@ -36,7 +43,7 @@ sed -i "s/^version .*/version := \"$VERSION\"/g" build.sbt
 if [[ -n $EPOCH && $EPOCH -gt 0 ]] ; then
     echo 'version in Debian := "'$EPOCH:$VERSION'"' >> build.sbt
 else
-    echo 'version in Debian := "'$VERSION-$BUILD'"' >> build.sbt
+    echo 'version in Debian := "'1:$VERSION-$BUILD'"' >> build.sbt
 fi
 sbt update
 sbt debian:packageBin

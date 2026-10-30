@@ -1,13 +1,12 @@
-import Settings from '/imports/ui/services/settings';
+import { getSettingsSingletonInstance } from '/imports/ui/services/settings';
 import logger from '/imports/startup/client/logger';
+import { getStorageSingletonInstance } from '/imports/ui/services/storage';
 
 const AUDIO_SESSION_NUM_KEY = 'AudioSessionNumber';
 const DEFAULT_INPUT_DEVICE_ID = '';
 const DEFAULT_OUTPUT_DEVICE_ID = '';
 const INPUT_DEVICE_ID_KEY = 'audioInputDeviceId';
 const OUTPUT_DEVICE_ID_KEY = 'audioOutputDeviceId';
-const AUDIO_MICROPHONE_CONSTRAINTS = Meteor.settings.public.app.defaultSettings
-  .application.microphoneConstraints;
 
 const getAudioSessionNumber = () => {
   let currItem = parseInt(sessionStorage.getItem(AUDIO_SESSION_NUM_KEY), 10);
@@ -29,6 +28,32 @@ const reloadAudioElement = (audioElement) => {
   }
 
   return false;
+};
+
+const getCurrentAudioSinkId = () => {
+  const MEDIA_TAG = window.meetingClientSettings.public.media.mediaTag;
+  const audioElement = document.querySelector(MEDIA_TAG);
+  return audioElement?.sinkId || DEFAULT_OUTPUT_DEVICE_ID;
+};
+
+const getStoredAudioOutputDeviceId = () => getStorageSingletonInstance()
+  .getItem(OUTPUT_DEVICE_ID_KEY);
+const storeAudioOutputDeviceId = (deviceId) => getStorageSingletonInstance()
+  .setItem(OUTPUT_DEVICE_ID_KEY, deviceId);
+const getStoredAudioInputDeviceId = () => getStorageSingletonInstance()
+  .getItem(INPUT_DEVICE_ID_KEY);
+const storeAudioInputDeviceId = (deviceId) => {
+  if (deviceId === 'listen-only') {
+    // Do not store listen-only "devices" and remove any stored device
+    // So it starts from scratch next time.
+    getStorageSingletonInstance().removeItem(INPUT_DEVICE_ID_KEY);
+
+    return false;
+  }
+
+  getStorageSingletonInstance().setItem(INPUT_DEVICE_ID_KEY, deviceId);
+
+  return true;
 };
 
 /**
@@ -63,10 +88,13 @@ const filterSupportedConstraints = (audioDeviceConstraints) => {
   }
 };
 
-const getAudioConstraints = ({ deviceId = '' }) => {
+const getAudioConstraints = (constraintFields = {}) => {
+  const { deviceId = '' } = constraintFields;
+  const Settings = getSettingsSingletonInstance();
   const userSettingsConstraints = Settings.application.microphoneConstraints;
   const audioDeviceConstraints = userSettingsConstraints
-    || AUDIO_MICROPHONE_CONSTRAINTS || {};
+    || window.meetingClientSettings.public.app.defaultSettings.application.microphoneConstraints
+    || {};
 
   const matchConstraints = filterSupportedConstraints(
     audioDeviceConstraints,
@@ -79,6 +107,50 @@ const getAudioConstraints = ({ deviceId = '' }) => {
   return matchConstraints;
 };
 
+const doGUM = async (constraints, retryOnFailure = false) => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    return stream;
+  } catch (error) {
+    // This is probably a deviceId mismatch. Retry with base constraints
+    // without an exact deviceId.
+    const retryableErrors = ['NotFoundError', 'OverconstrainedError', 'NotReadableError'];
+
+    if (retryOnFailure && retryableErrors.includes(error.name)) {
+      logger.warn({
+        logCode: 'audio_overconstrainederror_rollback',
+        extraInfo: {
+          constraints,
+          errorName: error.name,
+          errorMessage: error.message,
+        },
+      }, 'Audio getUserMedia returned OverconstrainedError, rollback');
+
+      return navigator.mediaDevices.getUserMedia({ audio: true });
+    }
+
+    // Not OverconstrainedError - bubble up the error.
+    throw error;
+  }
+};
+
+const isEnabled = () => window.meetingClientSettings.public.app.audioCaptions.enabled;
+
+const getProvider = () => window.meetingClientSettings.public.app.audioCaptions.provider;
+
+const isWebSpeechApi = () => getProvider() === 'webspeech';
+
+const isVosk = () => getProvider() === 'vosk';
+
+const isWhispering = () => getProvider() === 'whisper';
+
+const isDeepSpeech = () => getProvider() === 'deepSpeech';
+
+const isActive = () => isEnabled()
+  && ((isWebSpeechApi()) || isVosk() || isWhispering() || isDeepSpeech());
+
+const stereoUnsupported = () => isActive() && isVosk();
+
 export {
   DEFAULT_INPUT_DEVICE_ID,
   DEFAULT_OUTPUT_DEVICE_ID,
@@ -89,4 +161,11 @@ export {
   reloadAudioElement,
   filterSupportedConstraints,
   getAudioConstraints,
+  getCurrentAudioSinkId,
+  getStoredAudioInputDeviceId,
+  storeAudioInputDeviceId,
+  getStoredAudioOutputDeviceId,
+  storeAudioOutputDeviceId,
+  doGUM,
+  stereoUnsupported,
 };

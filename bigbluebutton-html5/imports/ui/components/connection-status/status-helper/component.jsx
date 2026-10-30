@@ -1,9 +1,10 @@
 import React, { Fragment, PureComponent } from 'react';
 import { defineMessages, injectIntl } from 'react-intl';
+import { useReactiveVar } from '@apollo/client';
 import Styled from './styles';
-import { withModalMounter } from '/imports/ui/components/common/modal/service';
 import Icon from '/imports/ui/components/connection-status/icon/component';
-import SettingsMenuContainer from '/imports/ui/components/settings/container';
+import connectionStatus from '/imports/ui/core/graphql/singletons/connectionStatus';
+import { getWorstStatus } from '../service';
 
 const intlMessages = defineMessages({
   label: {
@@ -17,8 +18,9 @@ const intlMessages = defineMessages({
 });
 
 class ConnectionStatusIcon extends PureComponent {
+  // eslint-disable-next-line
   renderIcon(level = 'normal') {
-    return(
+    return (
       <Styled.IconWrapper>
         <Icon
           level={level}
@@ -30,22 +32,19 @@ class ConnectionStatusIcon extends PureComponent {
 
   openAdjustSettings() {
     const {
-      closeModal,
-      mountModal,
+      setAdjustYourSettingsModalIsOpen,
     } = this.props;
-
-    closeModal();
-    mountModal(<SettingsMenuContainer selectedTab={2} />);
+    setAdjustYourSettingsModalIsOpen(true);
   }
 
   render() {
     const {
       intl,
-      stats,
+      currentStatus,
     } = this.props;
-  
+
     let color;
-    switch (stats) {
+    switch (currentStatus) {
       case 'warning':
         color = 'success';
         break;
@@ -59,20 +58,19 @@ class ConnectionStatusIcon extends PureComponent {
         color = 'success';
     }
 
-    const level = stats ? stats : 'normal';
-
     return (
-      <Fragment>
+      <>
         <Styled.StatusIconWrapper color={color}>
-          {this.renderIcon(level)}
+          {this.renderIcon(currentStatus)}
         </Styled.StatusIconWrapper>
         <Styled.Label>
           {intl.formatMessage(intlMessages.label)}
         </Styled.Label>
-        {level === 'critical' || level === 'danger'
-          && (
+        {(currentStatus === 'critical' || currentStatus === 'danger')
+          ? (
             <div>
               <Styled.Settings
+              // eslint-disable-next-line
                 onClick={this.openAdjustSettings.bind(this)}
                 role="button"
               >
@@ -80,10 +78,30 @@ class ConnectionStatusIcon extends PureComponent {
               </Styled.Settings>
             </div>
           )
-        }
-      </Fragment>
+          : (
+            <div>&nbsp;</div>
+          )}
+      </>
     );
   }
 }
 
-export default withModalMounter(injectIntl(ConnectionStatusIcon));
+const WrapConnectionStatus = (props) => {
+  const rttStatus = useReactiveVar(connectionStatus.getRttStatusVar());
+  const packetLossStatus = useReactiveVar(connectionStatus.getPacketLossStatusVar());
+  const liveKitConnQuality = useReactiveVar(connectionStatus.getLiveKitConnectionStatusVar());
+  const status = getWorstStatus([
+    rttStatus,
+    packetLossStatus,
+    liveKitConnQuality,
+  ]);
+
+  return (
+    <ConnectionStatusIcon
+      {...props}
+      currentStatus={status}
+    />
+  );
+};
+
+export default injectIntl(WrapConnectionStatus);

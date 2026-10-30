@@ -30,8 +30,11 @@ public class User {
 	private String externalUserId;
 	private String fullname;
 	private String role;
+	private Boolean locked;
 	private String avatarURL;
+	private String webcamBackgroundURL;
 	private Map<String,String> status;
+	private Boolean bot;
 	private Boolean guest;
 	private String  guestStatus;
 	private Boolean listeningOnly = false;
@@ -44,7 +47,10 @@ public class User {
 							String externalUserId,
 							String fullname,
 							String role,
+							Boolean locked,
 							String avatarURL,
+							String webcamBackgroundURL,
+							Boolean bot,
 							Boolean guest,
 							String  guestStatus,
 							String clientType) {
@@ -52,7 +58,10 @@ public class User {
 		this.externalUserId = externalUserId;
 		this.fullname = fullname;
 		this.role = role;
+		this.locked = locked;
 		this.avatarURL = avatarURL;
+		this.webcamBackgroundURL = webcamBackgroundURL;
+		this.bot = bot;
 		this.guest = guest;
 		this.guestStatus = guestStatus;
 		this.status = new ConcurrentHashMap<>();
@@ -73,6 +82,14 @@ public class User {
 	
 	public void setExternalUserId(String externalUserId){
 		this.externalUserId = externalUserId;
+	}
+
+	public void setBot(Boolean bot) {
+		this.bot = bot;
+	}
+
+	public Boolean isBot() {
+		return this.bot;
 	}
 
 	public void setGuest(Boolean guest) {
@@ -119,6 +136,9 @@ public class User {
 	public void setRole(String role) {
 		this.role = role;
 	}
+	public void setLocked(Boolean locked) {
+		this.locked = locked;
+	}
 
 	public String getAvatarUrl() {
 		return avatarURL;
@@ -128,8 +148,20 @@ public class User {
 		this.avatarURL = avatarURL;
 	}
 
+	public String getWebcamBackgroundUrl() {
+		return webcamBackgroundURL;
+	}
+
+	public void setWebcamBackgroundUrl(String webcamBackgroundURL) {
+		this.webcamBackgroundURL = webcamBackgroundURL;
+	}
+
 	public boolean isModerator() {
 		return "MODERATOR".equalsIgnoreCase(this.role);
+	}
+
+	public boolean isLocked() {
+		return this.locked;
 	}
 	
 	public void setStatus(String key, String value){

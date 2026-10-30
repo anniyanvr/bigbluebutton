@@ -17,20 +17,28 @@ import {
 const GlobalStyle = createGlobalStyle`
   // BBBMenu
   @media ${smallOnly} {
-    .MuiPaper-root.MuiMenu-paper.MuiPopover-paper {
+    .MuiPopover-root {
+      top: 0 !important;
+    }
+    .MuiPaper-root-mobile {
       top: 0 !important;
       left: 0 !important;
       bottom: 0 !important;
       right: 0 !important;
-      max-width: none;
+      max-width: none !important;
+    }
+    .MuiPaper-root {
+      width: 100%;
     }
   }
-
+  .MuiList-padding {
+    padding: 0 !important;
+  }
   .MuiPaper-root {
     background-color: ${dropdownBg};
     border-radius: ${borderRadius};
     border: 0;
-    z-index: 9999;
+    z-index: 999;
     max-width: 22rem;
   }
 
@@ -42,17 +50,6 @@ const GlobalStyle = createGlobalStyle`
     100% {
       opacity: 1;
     }
-  }
-
-  .permissionsOverlay {
-    position: fixed;
-    z-index: 1002;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background-color: rgba(0, 0, 0, .85);
-    animation: fade-in .5s ease-in;
   }
 
   .modalOverlay {
@@ -69,7 +66,7 @@ const GlobalStyle = createGlobalStyle`
   }
 
   .fullscreenModalOverlay {
-    z-index: 1000;
+    z-index: 900;
     background: #fff;
     display: flex;
     align-items: center;
@@ -95,23 +92,22 @@ const GlobalStyle = createGlobalStyle`
     animation-duration: 0.75s;
     -webkit-animation-fill-mode: both;
     animation-fill-mode: both;
-    max-width: 20rem !important;
-    min-width: 20rem !important;
-    width: 20rem !important;
+    width: 320px !important;
     cursor: pointer;
     background-color: ${colorWhite};
 
-    &:hover,
     &:focus {
       background-color: #EEE;
     }
   }
 
   .toastBodyClass {
+    font-family: 'Source Sans Pro';
     margin: auto auto;
     flex: 1;
     background-color: inherit;
     max-width: 17.75rem !important;
+    background-color: ${colorWhite} !important;
   }
 
   @keyframes track-progress {
@@ -130,9 +126,9 @@ const GlobalStyle = createGlobalStyle`
     right: auto;
     width: 0;
     height: 5px;
-    z-index: 9999;
+    z-index: 999;
     animation: track-progress linear 1;
-    background-color: ${colorGrayLighter};
+    background-color: ${colorGrayLighter} !important;
     border-radius: ${borderRadius};
 
     [dir="rtl"] & {

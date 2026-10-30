@@ -1,6 +1,6 @@
 package org.bigbluebutton.core.apps
 
-import org.bigbluebutton.core.domain.{ BreakoutRoom2x, BreakoutUser }
+import org.bigbluebutton.core.domain.{BreakoutRoom2x, BreakoutUser}
 
 object BreakoutModel {
   def create(
@@ -13,9 +13,16 @@ object BreakoutModel {
       isDefaultName: Boolean,
       freeJoin:      Boolean,
       voiceConf:     String,
-      assignedUsers: Vector[String]
+      assignedUsers: Vector[String],
+      captureNotes:  Boolean,
+      captureSlides: Boolean,
+      captureNotesFilename: String,
+      captureSlidesFilename: String,
+      allPages: Boolean,
+      presId: String,
   ): BreakoutRoom2x = {
-    new BreakoutRoom2x(id, externalId, name, parentId, sequence, shortName, isDefaultName, freeJoin, voiceConf, assignedUsers, Vector(), Vector(), None, false)
+    new BreakoutRoom2x(id, externalId, name, parentId, sequence, shortName, isDefaultName, freeJoin, voiceConf, assignedUsers, Vector(), Vector(), None, false,
+      captureNotes, captureSlides, captureNotesFilename, captureSlidesFilename, allPages, presId)
   }
 
 }
@@ -23,7 +30,8 @@ object BreakoutModel {
 case class BreakoutModel(
     startedOn:         Option[Long],
     durationInSeconds: Int,
-    rooms:             Map[String, BreakoutRoom2x]
+    rooms:             Map[String, BreakoutRoom2x],
+    sendInviteToModerators: Boolean,
 ) {
 
   def find(id: String): Option[BreakoutRoom2x] = {

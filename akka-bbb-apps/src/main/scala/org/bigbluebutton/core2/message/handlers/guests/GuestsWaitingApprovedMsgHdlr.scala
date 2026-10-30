@@ -3,11 +3,12 @@ package org.bigbluebutton.core2.message.handlers.guests
 import org.bigbluebutton.common2.msgs.{ GuestApprovedVO, GuestsWaitingApprovedMsg }
 import org.bigbluebutton.core.apps.users.UsersApp
 import org.bigbluebutton.core.apps.voice.VoiceApp
-import org.bigbluebutton.core.models._
-import org.bigbluebutton.core.bus.InternalEventBus
-import org.bigbluebutton.core.running.{ BaseMeetingActor, HandlerHelpers, LiveMeeting, OutMsgRouter }
-import org.bigbluebutton.core2.message.senders.MsgBuilder
 import org.bigbluebutton.core.apps.{ PermissionCheck, RightsManagementTrait }
+import org.bigbluebutton.core.bus.InternalEventBus
+import org.bigbluebutton.core.models._
+import org.bigbluebutton.core.running.{ BaseMeetingActor, HandlerHelpers, LiveMeeting, OutMsgRouter }
+import org.bigbluebutton.core2.MeetingStatus2x
+import org.bigbluebutton.core2.message.senders.MsgBuilder
 
 trait GuestsWaitingApprovedMsgHdlr extends HandlerHelpers with RightsManagementTrait {
   this: BaseMeetingActor =>
@@ -31,6 +32,15 @@ trait GuestsWaitingApprovedMsgHdlr extends HandlerHelpers with RightsManagementT
             Users2x.findWithIntId(liveMeeting.users2x, g.guest) match {
               case Some(dialInUser) =>
                 if (g.status == GuestStatus.ALLOW) {
+                  //Set dial in user as Joined
+                  for {
+                    regUser <- RegisteredUsers.findWithUserId(dialInUser.intId, liveMeeting.registeredUsers)
+                  } yield {
+                    if (!regUser.loggedOut) {
+                      RegisteredUsers.updateUserJoin(liveMeeting.registeredUsers, regUser, joined = true)
+                    }
+                  }
+
                   VoiceApp.handleUserJoinedVoiceConfEvtMsg(
                     liveMeeting,
                     outGW,
@@ -41,10 +51,28 @@ trait GuestsWaitingApprovedMsgHdlr extends HandlerHelpers with RightsManagementT
                     "none",
                     dialInUser.name,
                     dialInUser.name,
-                    false,
-                    false,
-                    "freeswitch"
+                    dialInUser.color,
+                    MeetingStatus2x.isMeetingMuted(liveMeeting.status),
+                    talking = false,
+                    "freeswitch",
+                    hold = false,
+                    "unused"
                   )
+                  VoiceUsers.findWithIntId(
+                    liveMeeting.voiceUsers,
+                    dialInUser.intId
+                  ) match {
+                      case Some(vu) =>
+                        VoiceApp.toggleUserAudioInVoiceConf(
+                          liveMeeting,
+                          outGW,
+                          vu.intId,
+                          vu.voiceUserId,
+                          enabled = true
+                        )
+                      case None =>
+                        println(s"Skipping transferring dial-in user to the voiceconf: dial-in user already left. meetingId= ${liveMeeting.props.meetingProp.intId}, userId= ${dialInUser.intId}")
+                    }
                 } else {
                   VoiceApp.removeUserFromVoiceConf(liveMeeting, outGW, dialInUser.extId)
                   val event = MsgBuilder.buildEjectUserFromVoiceConfSysMsg(liveMeeting.props.meetingProp.intId, liveMeeting.props.voiceProp.voiceConf, g.guest)

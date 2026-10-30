@@ -4,11 +4,6 @@ trait PadStandardMsg extends BbbCoreMsg {
   def header: BbbCoreHeaderWithMeetingId
 }
 
-// client -> apps
-object PadCreateGroupReqMsg { val NAME = "PadCreateGroupReqMsg" }
-case class PadCreateGroupReqMsg(header: BbbClientMsgHeader, body: PadCreateGroupReqMsgBody) extends StandardMsg
-case class PadCreateGroupReqMsgBody(externalId: String, model: String, name: String)
-
 // apps -> pads
 object PadCreateGroupCmdMsg { val NAME = "PadCreateGroupCmdMsg" }
 case class PadCreateGroupCmdMsg(header: BbbCoreHeaderWithMeetingId, body: PadCreateGroupCmdMsgBody) extends BbbCoreMsg
@@ -94,11 +89,6 @@ object PadContentEvtMsg { val NAME = "PadContentEvtMsg" }
 case class PadContentEvtMsg(header: BbbCoreHeaderWithMeetingId, body: PadContentEvtMsgBody) extends BbbCoreMsg
 case class PadContentEvtMsgBody(externalId: String, padId: String, rev: String, start: Int, end: Int, text: String)
 
-// pads -> apps
-object PadPatchSysMsg { val NAME = "PadPatchSysMsg" }
-case class PadPatchSysMsg(header: BbbCoreHeaderWithMeetingId, body: PadPatchSysMsgBody) extends PadStandardMsg
-case class PadPatchSysMsgBody(groupId: String, padId: String, userId: String, start: Int, end: Int, text: String)
-
 // apps -> client
 object PadTailEvtMsg { val NAME = "PadTailEvtMsg" }
 case class PadTailEvtMsg(header: BbbCoreHeaderWithMeetingId, body: PadTailEvtMsgBody) extends BbbCoreMsg
@@ -107,9 +97,24 @@ case class PadTailEvtMsgBody(externalId: String, tail: String)
 // client -> apps
 object PadUpdatePubMsg { val NAME = "PadUpdatePubMsg" }
 case class PadUpdatePubMsg(header: BbbClientMsgHeader, body: PadUpdatePubMsgBody) extends StandardMsg
-case class PadUpdatePubMsgBody(externalId: String, text: String)
+case class PadUpdatePubMsgBody(externalId: String, text: String, transcript: Boolean)
 
 // apps -> pads
 object PadUpdateCmdMsg { val NAME = "PadUpdateCmdMsg" }
 case class PadUpdateCmdMsg(header: BbbCoreHeaderWithMeetingId, body: PadUpdateCmdMsgBody) extends BbbCoreMsg
 case class PadUpdateCmdMsgBody(groupId: String, name: String, text: String)
+
+// pads -> apps
+object PadCapturePubMsg { val NAME = "PadCapturePubMsg" }
+case class PadCapturePubMsg(header: BbbCoreHeaderWithMeetingId, body: PadCapturePubMsgBody) extends PadStandardMsg
+case class PadCapturePubMsgBody(parentMeetingId: String, breakoutId: String, padId: String, filename: String)
+
+// client -> apps
+object PadPinnedReqMsg { val NAME = "PadPinnedReqMsg" }
+case class PadPinnedReqMsg(header: BbbClientMsgHeader, body: PadPinnedReqMsgBody) extends StandardMsg
+case class PadPinnedReqMsgBody(externalId: String, pinned: Boolean)
+
+// apps -> client
+object PadPinnedEvtMsg { val NAME = "PadPinnedEvtMsg" }
+case class PadPinnedEvtMsg(header: BbbClientMsgHeader, body: PadPinnedEvtMsgBody) extends BbbCoreMsg
+case class PadPinnedEvtMsgBody(externalId: String, pinned: Boolean)

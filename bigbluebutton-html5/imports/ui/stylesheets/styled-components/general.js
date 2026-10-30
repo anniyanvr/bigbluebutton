@@ -1,7 +1,14 @@
+import {
+  SIDEBAR_CONTENT_VERTICAL_MARGIN,
+  SIDEBAR_CONTENT_MARGIN_TO_MEDIA,
+  SIDEBAR_NAVIGATION_MARGIN,
+} from '/imports/ui/components/layout/defaultValues';
+
 const borderSizeSmall = '1px';
 const borderSize = '2px';
 const borderSizeLarge = '3px';
 const borderRadius = '.2rem';
+const lgBorderRadius = '1rem';
 const smPaddingX = '.75rem';
 const smPaddingY = '.3rem';
 const mdPaddingY = '.45rem';
@@ -11,16 +18,41 @@ const lgPaddingY = '0.6rem';
 const jumboPaddingY = '1.5rem';
 const jumboPaddingX = '3.025rem';
 
+const xsPadding = '0.125rem';
+const smPadding = '0.25rem';
+const mdPadding = '0.375rem';
+const lgPadding = '0.5rem';
+const xlPadding = '0.75rem';
+const $2xlPadding = '1rem';
+const $3xlPadding = '1.25rem';
+
 const whiteboardToolbarPadding = '.5rem';
 const whiteboardToolbarMargin = '.5rem';
 const whiteboardToolbarPaddingSm = '.3rem';
+const contentSidebarGap = '0.5rem';
+const contentSidebarPadding = '1rem';
+const contentSidebarUserListPadding = '0.5rem';
+const contentSidebarBottomScrollPadding = '2rem';
+const contentSidebarHeight = '92%';
+const contentSidebarBorderRadius = '1rem';
+const contentSidebarVerticalMargin = `${SIDEBAR_CONTENT_VERTICAL_MARGIN}px`;
+const contentSidebarMarginToMedia = `${SIDEBAR_CONTENT_MARGIN_TO_MEDIA}px`;
 const minModalHeight = '20rem';
 const descriptionMargin = '3.5rem';
 const navbarHeight = '3.9375rem';
 const barsPadding = '0.8rem'; // so user-list and chat title is aligned with the presentation title
+const navigationSidebarLogoPadding = '15%';
+const navigationSidebarListItemsContainerGap = '2.5rem';
+const navigationSidebarListItemsGap = '0.8rem';
+const navigationSidebarListItemsWidth = '65%';
+const navigationSidebarBorderRadius = '48px';
+const navigationSidebarPaddingY = '20px';
+const navigationSidebarMargin = `${SIDEBAR_NAVIGATION_MARGIN}px`;
 const pollHeaderOffset = '-0.875rem';
 const toastContentWidth = '98%';
 const modalMargin = '3rem';
+const settingsModalHeight = '50rem';
+const settingsModalWidth = '70rem';
 const titlePositionLeft = '2.2rem';
 const userIndicatorsOffset = '-5px';
 const indicatorPadding = '.45rem'; // used to center presenter indicator icon in Chrome / Firefox / Edge
@@ -64,14 +96,14 @@ const pollMdMargin = '0.7rem';
 const pollResultWidth = '15rem';
 const pollInputHeight = '2.5rem';
 const pollWidth = '18rem';
-const overlayIndex = '9999';
+const overlayIndex = '999';
 const overlayOpacity = '0.349';
 const pollIndex = '1016';
 const pollBottomOffset = '4.5rem';
 const pollColAmount = '2';
 
 const toastMargin = '.5rem';
-const avatarSide = '34px';
+const avatarSide = '3rem';
 const avatarWrapperOffset = '14px';
 const avatarInset = '-7px';
 
@@ -84,10 +116,24 @@ const btnSpacing = '.35rem';
 const toastIconMd = '2rem';
 const toastIconSm = '1.2rem';
 
+const presentationMenuHeight = '45px';
+
+const styleMenuOffset = '6.25rem';
+const styleMenuOffsetSmall = '5rem';
+
+const appsPanelGroupItemsSpacing = '1.5rem';
+const appsPanelItemsSpacing = '1rem';
+const appsButtonsBorderRadius = '8px';
+const appsModalButtonPaddingX = '10%';
+const appsModalButtonPaddingY = '2%';
+const appsModalPadding = '3rem';
+const appsModalPaddingBottom = '1.5rem';
+
 export {
   borderSizeSmall,
   borderSize,
   borderSizeLarge,
+  lgBorderRadius,
   borderRadius,
   smPaddingX,
   smPaddingY,
@@ -103,6 +149,13 @@ export {
   descriptionMargin,
   navbarHeight,
   barsPadding,
+  navigationSidebarLogoPadding,
+  navigationSidebarListItemsContainerGap,
+  navigationSidebarListItemsGap,
+  navigationSidebarListItemsWidth,
+  navigationSidebarBorderRadius,
+  navigationSidebarPaddingY,
+  navigationSidebarMargin,
   pollHeaderOffset,
   toastContentWidth,
   modalMargin,
@@ -162,4 +215,31 @@ export {
   btnSpacing,
   toastIconMd,
   toastIconSm,
+  presentationMenuHeight,
+  styleMenuOffset,
+  styleMenuOffsetSmall,
+  lgPadding,
+  mdPadding,
+  smPadding,
+  $2xlPadding,
+  $3xlPadding,
+  xlPadding,
+  xsPadding,
+  contentSidebarGap,
+  contentSidebarPadding,
+  contentSidebarUserListPadding,
+  contentSidebarBottomScrollPadding,
+  contentSidebarHeight,
+  contentSidebarBorderRadius,
+  contentSidebarVerticalMargin,
+  contentSidebarMarginToMedia,
+  appsPanelGroupItemsSpacing,
+  appsPanelItemsSpacing,
+  appsButtonsBorderRadius,
+  appsModalButtonPaddingX,
+  appsModalButtonPaddingY,
+  appsModalPadding,
+  appsModalPaddingBottom,
+  settingsModalHeight,
+  settingsModalWidth,
 };

@@ -7,33 +7,34 @@ import Styled from './styles';
 const propTypes = {
   icon: PropTypes.string,
   message: PropTypes.node.isRequired,
-  type: PropTypes.oneOf(Object.values(toast.TYPE)).isRequired,
-};
-
-const defaultProps = {
-  icon: null,
 };
 
 const defaultIcons = {
-  [toast.TYPE.INFO]: 'help',
-  [toast.TYPE.SUCCESS]: 'checkmark',
-  [toast.TYPE.WARNING]: 'warning',
-  [toast.TYPE.ERROR]: 'close',
-  [toast.TYPE.DEFAULT]: 'about',
+  info: 'help',
+  success: 'checkmark',
+  warning: 'warning',
+  error: 'close',
+  default: 'about',
 };
 
 const Toast = ({
-  icon,
+  icon = null,
   type,
   message,
   content,
   small,
+  showSeparator = true,
 }) => (
-  <Styled.ToastContainer small={small} data-test="toastContainer">
+  <Styled.ToastContainer
+    small={small}
+    data-test="toastContainer"
+  >
     <Styled.Toast type={type}>
-      <Styled.ToastIcon className="toastIcon" small={small}>
-        <Icon iconName={icon || defaultIcons[type]} />
-      </Styled.ToastIcon>
+      {icon !== false && (
+        <Styled.ToastIcon className="toastIcon" small={small}>
+          <Icon iconName={icon || defaultIcons[type]} />
+        </Styled.ToastIcon>
+      )}
       <Styled.ToastMessage data-test="toastSmallMsg">
         <span>{message}</span>
       </Styled.ToastMessage>
@@ -41,7 +42,7 @@ const Toast = ({
     {content
       ? (
         <Styled.BackgroundColorInherit>
-          <Styled.Separator />
+          {showSeparator && <Styled.Separator visible={showSeparator} />}
           <Styled.BackgroundColorInherit>
             {content}
           </Styled.BackgroundColorInherit>
@@ -53,4 +54,3 @@ const Toast = ({
 export default Toast;
 
 Toast.propTypes = propTypes;
-Toast.defaultProps = defaultProps;

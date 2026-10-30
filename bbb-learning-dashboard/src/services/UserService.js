@@ -1,4 +1,4 @@
-import { emojiConfigs, filterUserEmojis } from './EmojiService';
+import { filterUserReactions } from './ReactionService';
 
 export function getActivityScore(user, allUsers, totalOfPolls) {
   if (user.isModerator) return 0;
@@ -21,19 +21,19 @@ export function getActivityScore(user, allUsers, totalOfPolls) {
   }
 
   // Calculate points of Raise hand
-  const usersRaiseHand = allUsersArr.map((currUser) => currUser.emojis.filter((emoji) => emoji.name === 'raiseHand').length);
+  const usersRaiseHand = allUsersArr.map((currUser) => currUser.raiseHand.length);
   const maxRaiseHand = Math.max(...usersRaiseHand);
-  const userRaiseHand = user.emojis.filter((emoji) => emoji.name === 'raiseHand').length;
+  const userRaiseHand = user.raiseHand.length;
   if (maxRaiseHand > 0) {
     userPoints += (userRaiseHand / maxRaiseHand) * 2;
   }
 
-  // Calculate points of Emojis
-  const usersEmojis = allUsersArr.map((currUser) => currUser.emojis.filter((emoji) => emoji.name !== 'raiseHand').length);
-  const maxEmojis = Math.max(...usersEmojis);
-  const userEmojis = user.emojis.filter((emoji) => emoji.name !== 'raiseHand').length;
-  if (maxEmojis > 0) {
-    userPoints += (userEmojis / maxEmojis) * 2;
+  // Calculate points of Reactions
+  const usersReactions = allUsersArr.map((currUser) => currUser.reactions.length);
+  const maxReactions = Math.max(...usersReactions);
+  const userReactions = user.reactions.length;
+  if (maxReactions > 0) {
+    userPoints += (userReactions / maxReactions) * 2;
   }
 
   // Calculate points of Polls
@@ -46,10 +46,36 @@ export function getActivityScore(user, allUsers, totalOfPolls) {
 
 export function getSumOfTime(eventsArr) {
   return eventsArr.reduce((prevVal, elem) => {
+    if (elem?.sessions) {
+      return prevVal + elem.sessions.reduce((prevVal2, session) => {
+        if (session.leftOn > 0) {
+          return prevVal2 + (session.leftOn - session.registeredOn);
+        }
+        return prevVal2 + (new Date().getTime() - session.registeredOn);
+      }, 0);
+    }
     if ((elem.stoppedOn || elem.leftOn) > 0) {
       return prevVal + ((elem.stoppedOn || elem.leftOn) - (elem.startedOn || elem.registeredOn));
     }
     return prevVal + (new Date().getTime() - (elem.startedOn || elem.registeredOn));
+  }, 0);
+}
+
+export function getJoinTime(eventsArr) {
+  return eventsArr.reduce((prevVal, elem) => {
+    if (prevVal === 0 || elem.sessions[0].registeredOn < prevVal) {
+      return elem.sessions[0].registeredOn;
+    }
+    return prevVal;
+  }, 0);
+}
+
+export function getLeaveTime(eventsArr) {
+  return eventsArr.reduce((prevVal, elem) => {
+    if (elem.sessions[elem.sessions.length - 1].leftOn > prevVal) {
+      return elem.sessions[elem.sessions.length - 1].leftOn;
+    }
+    return prevVal;
   }, 0);
 }
 
@@ -83,8 +109,8 @@ const tableHeaderFields = [
     defaultMessage: 'Messages',
   },
   {
-    id: 'colEmojis',
-    defaultMessage: 'Emojis',
+    id: 'colReactions',
+    defaultMessage: 'Reactions',
   },
   {
     id: 'pollVotes',
@@ -112,15 +138,13 @@ export function makeUserCSVData(users, polls, intl) {
   const userRecords = {};
   const userValues = Object.values(users || {});
   const pollValues = Object.values(polls || {});
-  const skipEmojis = Object
-    .keys(emojiConfigs)
-    .filter((emoji) => emoji !== 'raiseHand')
-    .join(',');
 
   for (let i = 0; i < userValues.length; i += 1) {
     const user = userValues[i];
     const webcam = getSumOfTime(user.webcams);
     const duration = getSumOfTime(Object.values(user.intIds));
+    const joinTime = getJoinTime(Object.values(user.intIds));
+    const leaveTime = getLeaveTime(Object.values(user.intIds));
 
     const userData = {
       name: user.name,
@@ -135,10 +159,10 @@ export function makeUserCSVData(users, polls, intl) {
       talk: user.talk.totalTime > 0 ? tsToHHmmss(user.talk.totalTime) : '-',
       webcam: webcam > 0 ? tsToHHmmss(webcam) : '-',
       messages: user.totalOfMessages,
-      raiseHand: filterUserEmojis(user, 'raiseHand').length,
+      reactions: filterUserReactions(user).length,
       answers: Object.keys(user.answers).length,
-      emojis: filterUserEmojis(user, skipEmojis).length,
-      registeredOn: intl.formatDate(user.registeredOn, {
+      raiseHand: user.raiseHand.length,
+      registeredOn: intl.formatDate(joinTime, {
         year: 'numeric',
         month: 'numeric',
         day: 'numeric',
@@ -146,14 +170,14 @@ export function makeUserCSVData(users, polls, intl) {
         minute: '2-digit',
         second: '2-digit',
       }),
-      leftOn: intl.formatDate(user.leftOn, {
+      leftOn: leaveTime > 0 ? intl.formatDate(leaveTime, {
         year: 'numeric',
         month: 'numeric',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-      }),
+      }) : '-',
       duration: tsToHHmmss(duration),
     };
 
@@ -187,8 +211,8 @@ export function makeUserCSVData(users, polls, intl) {
   }
 
   for (let i = 0; i < pollValues.length; i += 1) {
-    // Add the poll question headers
-    header += `,${pollValues[i].question || `Poll ${i + 1}`}`;
+    // Add the poll question headers (remove spaces and line breaks)
+    header += `,${pollValues[i].question.replace(/\s+/g, ' ').trim() || `Poll ${i + 1}`}`;
 
     // Add the anonymous answers
     anonymousRecord += `,"${pollValues[i].anonymousAnswers.join('\r\n')}"`;

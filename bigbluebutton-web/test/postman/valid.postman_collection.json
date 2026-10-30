@@ -159,30 +159,6 @@
 			"response": []
 		},
 		{
-			"name": "enter",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{base_url}}/{{path}}/enter?{{param_session_token}}={{session_token}}",
-					"host": [
-						"{{base_url}}"
-					],
-					"path": [
-						"{{path}}",
-						"enter"
-					],
-					"query": [
-						{
-							"key": "{{param_session_token}}",
-							"value": "{{session_token}}"
-						}
-					]
-				}
-			},
-			"response": []
-		},
-		{
 			"name": "isMeetingRunning",
 			"event": [
 				{
@@ -409,38 +385,6 @@
 						{
 							"key": "checksum",
 							"value": "7dab7b203f78845eff87eaed4453e02b90f8c65f"
-						}
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "setPollXML",
-			"request": {
-				"method": "POST",
-				"header": [],
-				"url": {
-					"raw": "{{base_url}}/{{path}}/setPollXML?meetingID=Demo Meeting&pollXML=<poll><title>Test Poll</title><question>Test Question</question><questionType>Test</questionType><answers><answer>Answer1</answer><answer>Answer2</answer></answers></poll>&checksum=0cc4142338cc45d4f6eacfbcfa2ea9754061e7ea",
-					"host": [
-						"{{base_url}}"
-					],
-					"path": [
-						"{{path}}",
-						"setPollXML"
-					],
-					"query": [
-						{
-							"key": "meetingID",
-							"value": "Demo Meeting"
-						},
-						{
-							"key": "pollXML",
-							"value": "<poll><title>Test Poll</title><question>Test Question</question><questionType>Test</questionType><answers><answer>Answer1</answer><answer>Answer2</answer></answers></poll>"
-						},
-						{
-							"key": "checksum",
-							"value": "0cc4142338cc45d4f6eacfbcfa2ea9754061e7ea"
 						}
 					]
 				}
